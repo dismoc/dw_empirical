@@ -20,6 +20,10 @@ library(gtools)
 library('fuzzyjoin')
 library('lubridate')
 
+# Important Info
+df$bigsmall <- ifelse(df$RCON2170 >= 1000000, 'Large', 'Small')
+
+
 # Dependent variables from Acharya Mora (2015) ----
 df$int_ltd_ann <- Winsorize((df$RIADA517/df$RCONA514)*400,probs = c(0.01, 0.99), na.rm = TRUE) #interest rate, large time deposits (implicit)
 df$int_cd_ann <- Winsorize(((df$RIAD4508 + df$RIAD0093)/df$RCONA514)*400,probs = c(0.01, 0.99), na.rm = TRUE) #interest rate, core deposits (implicit)
@@ -50,8 +54,10 @@ df$size <- Winsorize(log(df$RCON2170),probs=c(.01,.99), na.rm = TRUE)
 df$age <- year(df$Date) - year(df$ESTYMD)
 join <- read_csv("D:/Research/DW lending empirical/Data/sod_merged.csv")
 join$CERT <- as.numeric(join$CERT)
-  select(-contains("..."))
-
+join$Date <- as.Date(join$Date)
+df$Date <- as.Date(df$Date)
+df <- left_join(data.frame(df), data.frame(join), by= c('cert' = 'CERT', 'Date'))
+  
 df$lent_total <- (df$RCONB987 + df$RCONB989)
 df$lent_total[IsZero(df$lent_total)] = NA
 df$int_paid_ib <- Winsorize(df$RIAD4020*100/(df$lent_total),probs = c(0.05, 0.95), na.rm = TRUE)

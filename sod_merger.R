@@ -57,9 +57,13 @@ sci <- data.frame(read_delim("D:/Research/DW lending empirical/Data/SOD/CI/coinc
 sci$time <- as.Date(timeLastDayInQuarter(as.Date(sci$Date,'%m/%d/%Y')))
 sci <- sci[seq(1, nrow(sci), 3), ][2:ncol(sci)]
 
-join <- data.frame(base[,c(1:2,62:63)], mapply("*", base[3:61], sci))
+join <- data.frame(base[,c(1:2,62:63)], 
+                   mapply("*", base[intersect(names(base), names(sci))],
+                          sci[intersect(names(base), names(sci))]))
 join <- data.frame(join[,1:4], exposure = rowSums(join[5:ncol(join)], na.rm = TRUE))
 join <- join[!is.na(join$RSSDHCR),]
+
+
 
 rm(sod, sodn, sci, base)
 

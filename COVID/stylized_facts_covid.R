@@ -142,9 +142,11 @@ ggplot(data.frame(plot1[1:24,2:4]), aes(fill = dwborrow_cov, y=n, x=as.factor(FE
 subset(df, as.Date(Date) >= as.Date('2019-03-31')) %>% count(Date, dwborrow_bin)
 
 # Share of banks large vs small that borrow during covid and 2019 (MEAN OF 2010-2019: .385 LARGE BANK SHARE, MEAN OF 2020: .61)
-df$bigsmall <- ifelse(df$RCON2170 >= 1000000, 'Large', 'Small')
 plot1 <- subset(df, as.Date(Date) >= as.Date('2010-01-30') & dwborrow_bin == 1) %>% count(Date, bigsmall)
 plot1 <- data.frame(reshape(plot1, idvar = 'Date', timevar = 'bigsmall', direction = 'wide')[,1:3])
 plot1$l_share <- plot1$n.Large/(plot1$n.Large + plot1$n.Small)
 mean(plot1[1:38,4])
 mean(plot1[39:40,4])
+
+# Comparing exposure to local economic condition (measured by Philly coincident index) between large and small banks
+aggregate(exposure ~ Date + dwborrow_bin, subset(df, as.Date(Date) >= as.Date('2019-09-30')), FUN = mean)
