@@ -20,7 +20,7 @@ library('xtable')
 dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
 conv <- data.frame(Name = unique(dwborrow$Lending.Federal.Reserve.district), FED = as.numeric(str_extract(unique(dwborrow$Lending.Federal.Reserve.district), "[[:digit:]]+")))
 
-cov <- subset(df, as.Date(df$Date) >= as.Date('2019-03-31') & as.Date(df$Date) <= as.Date('2020-06-30'))
+cov <- subset(df, as.Date(df$Date) >= as.Date('2019-03-31') & as.Date(df$Date) <= as.Date('2020-09-30'))
 
 
 
@@ -135,8 +135,10 @@ ggplot(data.frame(plot1), aes(fill=dwborrow_bin, y=n, x=Date)) +
   geom_bar(position="stack", stat="identity")
 
 # Graph about share of banks that borrow in each district in Q1 2020 ====
-plot1 <- subset(df, as.Date(Date) == as.Date('2020-03-31')) %>% count(Date, FED, dwborrow_cov)  
-ggplot(data.frame(plot1[1:24,2:4]), aes(fill = dwborrow_cov, y=n, x=as.factor(FED))) + geom_bar(position="stack", stat="identity")
+plot1 <- subset(df, as.Date(Date) == as.Date('2019-06-30')) %>% count(Date, FED, dwborrow_bin) 
+plot1 <- data.frame(reshape(plot1, idvar='FED', timevar = 'dwborrow_bin', direction='wide'))
+plot1$borrow_share <- plot1$n.1/(plot1$n.0+plot1$n.1)
+ggplot(data.frame(plot1[1:12,c(1,6)]), aes(x=as.factor(FED), y = borrow_share)) + geom_col()
 
 # Share of banks that borrow went from .9% in Q42019 to 4.5% in Q1 2020 and 4% in Q2 2020.
 subset(df, as.Date(Date) >= as.Date('2019-03-31')) %>% count(Date, dwborrow_bin)
@@ -150,3 +152,5 @@ mean(plot1[39:40,4])
 
 # Comparing exposure to local economic condition (measured by Philly coincident index) between large and small banks
 aggregate(exposure ~ Date + dwborrow_bin, subset(df, as.Date(Date) >= as.Date('2019-09-30')), FUN = mean)
+
+
