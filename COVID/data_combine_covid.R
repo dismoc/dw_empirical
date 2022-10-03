@@ -93,7 +93,8 @@ df$dwborrow_bin <- ifelse(df$dw_freq > 0, 1, 0)
 
 
 df$reserve_asset_ratio <- df$RCON0010/df$RCON2170
-df$reserve_deposit_ratio <- df$RCON0010/df$RCON2215
+df$reserve_deposit_ratio <- df$RCON0010/df$RCON2200
+df[is.infinite(df$reserve_deposit_ratio),c('reserve_deposit_ratio')] <- NA
 
 df$dwborrow_cov <- ifelse(df$dwborrow_bin == 1 & as.Date(df$Date) >= as.Date('2020-03-31'), 1, 0)
 
