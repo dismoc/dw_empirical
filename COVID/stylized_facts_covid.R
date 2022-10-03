@@ -129,7 +129,14 @@ agg$'Borrow Share' <- agg$dw_freq/agg$total_borrow
   # Print the table displaying the changes in shares.
   print(xtable(data.frame(agg), type = "latex", include.rownames=FALSE))
   
-# Share of banks that borrow (2019-2020)
+# Share of banks that borrow (2019-2020) ----
 plot1 <- cov %>% count(Date, dwborrow_bin)
 ggplot(data.frame(plot1), aes(fill=dwborrow_bin, y=n, x=Date)) + 
   geom_bar(position="stack", stat="identity")
+
+# Graph about share of banks that borrow in each district in Q1 2020 ====
+plot1 <- subset(df, as.Date(Date) == as.Date('2020-03-31')) %>% count(Date, FED, dwborrow_cov)  
+ggplot(data.frame(plot1[1:24,2:4]), aes(fill = dwborrow_cov, y=n, x=as.factor(FED))) + geom_bar(position="stack", stat="identity")
+
+# Share of banks that borrow went from .9% in Q42019 to 4.5% in Q1 2020 and 4% in Q2 2020.
+subset(df, as.Date(Date) >= as.Date('2019-03-31')) %>% count(Date, dwborrow_bin)
