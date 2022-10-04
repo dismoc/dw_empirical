@@ -41,9 +41,9 @@ df$size <- Winsorize(log(df$RCON2170),probs=c(.01,.99), na.rm = TRUE)
 df$age <- year(df$Date) - year(df$ESTYMD)
 join <- read_csv("D:/Research/DW lending empirical/Data/sod_merged.csv")
 join$CERT <- as.numeric(join$CERT)
-join$Date <- as.Date(as.character(join$Date))
+join <- join[!is.na(join$CERT),][2:6]; join <- join[!is.na(join$exposure),]
 df$Date <- as.Date(as.character(df$Date))
-df <- left_join(data.frame(df), data.frame(join), by= c('cert' = 'CERT', 'Date'))
+df <- left_join(df, join, by= c('cert' = 'CERT', 'Date'))
 rm(join)
 
 
@@ -68,3 +68,6 @@ df$ci_loans_growth <- Winsorize((df$ci_loans - lag(df$ci_loans))/lag(df$ci_loans
 df$loans <- df$RCON2122
 df$loans_growth <- Winsorize((df$RCON2122 - lag(df$RCON2122))/lag(df$RCON2122),probs = c(0.01, 0.99), na.rm = TRUE)
 
+df <- df %>%
+  group_by(IDRSSD, Date) %>%
+  slice(n())
