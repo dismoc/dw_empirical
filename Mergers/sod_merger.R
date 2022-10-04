@@ -34,7 +34,6 @@ base <- spread(base, STALPBR, dep_share)
 base <- left_join(base,sod[,c('RSSDHCR','CERT','YEAR')],by=c('RSSDHCR','YEAR'))
 base <- base[!duplicated(base[c("RSSDHCR","YEAR")]),]
 
-data.frame(base,rep(c('03-31','06-30','09-30','12-31')))
 base <- smartbind(base,base); base <- smartbind(base,base)
 
 base <- pdata.frame(base,index = c('RSSDHCR','YEAR'))
@@ -44,6 +43,8 @@ base <- data.frame(base, rep(q,nrow(base)/4))
 base$Date <- as.Date(paste0(base$YEAR,base$rep.q..nrow.base..4.))
 base <- pdata.frame(data.frame(base),index = c('RSSDHCR','Date'))
 base <- base[ , -which(names(base) %in% c("rep.q..nrow.base..4."))]
+base <- base[seq(1, nrow(base), 4), ]
+
 
 for (i in 3:ncol(base)-1){
   base[,i] <- lead(base[,i],2)
@@ -68,8 +69,16 @@ join <- data.frame(base[,c(1:2,62:63)],
 join <- data.frame(join[,1:4], exposure = rowSums(join[5:ncol(join)], na.rm = TRUE))
 join <- join[!is.na(join$RSSDHCR),]
 
+list <- match(base$Date, sci$time)
+pb = txtProgressBar(min = 0, max = length(list), initial = 0) 
+a <- vector(length = length(list))
 
+lapply(1:length(list), function(i){
+  a[i] <- ifelse(is.na(list[i]) == FALSE, sum(base[i,intersect(names(base), names(sci))]*sci[list[i],intersect(names(base), names(sci))], na.rm = TRUE), NA)
+  setTxtProgressBar(pb,i)})
+close(pb)
 
+join <- data.frame(base[,c('YEAR','RSSDHCR','CERT','Date','exposure')])
 rm(sod, sodn, sci, base)
 
 
