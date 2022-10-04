@@ -24,15 +24,15 @@ library('lubridate')
   # Strategy - do 2 regressions, pre and during covid.
 
 # 1 SD change in size during covid led to 6% increase in borrowing prob, 1 SD change in size pre-covid led to a 1% increase in borrowing prob.
-reg1 <-feols(dwborrow_bin ~ size + age + exposure + i(FED)| Date,
-      data = subset(df, as.Date(Date) >= as.Date('2020-01-01') & as.Date(Date) <= as.Date('2020-07-01') ),
+post <-feols(dwborrow_bin ~ size + age + exposure + ca + aq + roe + i(FED)| Date,
+      data = subset(df, as.Date(Date) >= as.Date('2020-01-01') & as.Date(Date) <= as.Date('2020-12-01') ),
       panel.id = c('IDRSSD','Date')) 
 
-reg2 <-feols(dwborrow_bin ~ size + age + exposure + i(FED)| Date,
+pre <-feols(dwborrow_bin ~ size + age + exposure + ca + aq + roe + i(FED)| Date,
              data = subset(df, as.Date(Date) <= as.Date('2020-01-01') ),
              panel.id = c('IDRSSD','Date')) 
 
-etable(reg1,reg2)      
+etable(post,pre, cluster='FED')      
 
 #small number of large banks in boston, new york,philly, SF (1,2,3,12), large number of small banks in chicago and KC. ----
 left_join(aggregate(size ~ FED + Date, subset(df, as.Date(Date) >= as.Date('2020-01-01')), FUN = mean), subset(df, as.Date(Date) >= as.Date('2020-01-01')) %>% count(Date, FED))

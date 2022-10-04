@@ -56,6 +56,11 @@ base$RSSDHCR <- as.numeric(as.character(base$RSSDHCR))
 sci <- data.frame(read_delim("D:/Research/DW lending empirical/Data/SOD/CI/coincident-revised.csv",show_col_types = FALSE))
 sci$time <- as.Date(timeLastDayInQuarter(as.Date(sci$Date,'%m/%d/%Y')))
 sci <- sci[seq(1, nrow(sci), 3), ][2:ncol(sci)]
+list <- names(sci)
+
+for (i in 1:(ncol(sci)-1)) {
+  sci[,i] <- c(diff(sci[,i]),NA)
+}
 
 join <- data.frame(base[,c(1:2,62:63)], 
                    mapply("*", base[intersect(names(base), names(sci))],

@@ -140,15 +140,17 @@ plot1 <- data.frame(reshape(plot1, idvar='FED', timevar = 'dwborrow_bin', direct
 plot1$borrow_share <- plot1$n.1/(plot1$n.0+plot1$n.1)
 ggplot(data.frame(plot1[1:12,c(1,6)]), aes(x=as.factor(FED), y = borrow_share)) + geom_col()
 
-# Share of banks that borrow went from .9% in Q42019 to 4.5% in Q1 2020 and 4% in Q2 2020.
-subset(df, as.Date(Date) >= as.Date('2019-03-31')) %>% count(Date, dwborrow_bin)
+# Share of banks that borrow went from .9% in Q42019 to 4.5% in Q1 2020 and 4% in Q2 2020, huge spike initially then dies down.
+plot1 <- reshape(subset(df, as.Date(Date) >= as.Date('2019-03-31')) %>% count(Date, dwborrow_bin), idvar = 'Date', timevar = 'dwborrow_bin', direction = 'wide')
+plot1$borrow_share <- plot1$n.1/(plot1$n.1 + plot1$n.0)
+ggplot(plot1, aes(x=Date, y=borrow_share)) + geom_line()
 
-# Share of banks large vs small that borrow during covid and 2019 (MEAN OF 2010-2019: .385 LARGE BANK SHARE, MEAN OF 2020: .61)
+# Share of banks large vs small that borrow during covid and 2019 (MEAN OF 2010-2019: .41 LARGE BANK SHARE, MEAN OF 2020: .61)
 plot1 <- subset(df, as.Date(Date) >= as.Date('2010-01-30') & dwborrow_bin == 1) %>% count(Date, bigsmall)
 plot1 <- data.frame(reshape(plot1, idvar = 'Date', timevar = 'bigsmall', direction = 'wide')[,1:3])
 plot1$l_share <- plot1$n.Large/(plot1$n.Large + plot1$n.Small)
 mean(plot1[1:38,4])
-mean(plot1[39:40,4])
+mean(plot1[39:41,4])
 
 # Comparing exposure to local economic condition (measured by Philly coincident index) between large and small banks
 aggregate(exposure ~ Date + dwborrow_bin, subset(df, as.Date(Date) >= as.Date('2019-09-30')), FUN = mean)
