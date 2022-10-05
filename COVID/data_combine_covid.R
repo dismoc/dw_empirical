@@ -14,7 +14,13 @@ library(ggplot2)
 library('zoo')
 library('fixest')
 library('timeDate')
+library('DescTools')
+library('summarytools')
+library(gtools)
+library('fuzzyjoin')
 library('lubridate')
+library('xtable')
+
 
 # Merging the data tables ----
 
@@ -104,7 +110,16 @@ setnames(ag, old=c('dwborrow_cov'), new=c('freq_cov'))
 df1 <- left_join(df, ag)
 df1$dwaccess_cov <- ifelse(df1$freq_cov > 0, 1, 0)
 df1$dwaccess_cov[is.na(df1$dwaccess_cov)] = 0
-df1 <- df1[ , -which(names(df1) %in% c("freq"))]
+df1 <- df1[ , -which(names(df1) %in% c("freq_cov"))]
+df <- df1
+rm(df1,ag)
+
+# pppaccess_cov
+ag <- aggregate(RCONLG26 ~ IDRSSD, data=df, FUN = sum, na.rm = TRUE)
+setnames(ag, old=c('RCONLG26'), new=c('ppp_quant_cov'))
+df1 <- left_join(df, ag)
+df1$pppaccess_cov <- ifelse(df1$freq_cov > 0, 1, 0)
+df1$pppaccess_cov[is.na(df1$dwaccess_cov)] = 0
 df <- df1
 rm(df1,ag)
 
