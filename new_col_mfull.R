@@ -68,6 +68,9 @@ df$ci_loans_growth <- Winsorize((df$ci_loans - lag(df$ci_loans))/lag(df$ci_loans
 df$loans <- df$RCON2122
 df$loans_growth <- Winsorize((df$RCON2122 - lag(df$RCON2122))/lag(df$RCON2122),probs = c(0.01, 0.99), na.rm = TRUE)
 
+df$ppp_bin <- ifelse(df$RCONLG26 > 0, 1, 0)
+df$ppp_uncovered <- df$RCONLG26 - df$RCONLG27
+
 df <- df %>%
   group_by(IDRSSD, Date) %>%
   slice(n())

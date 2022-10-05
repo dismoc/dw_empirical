@@ -20,7 +20,7 @@ library('xtable')
 dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
 conv <- data.frame(Name = unique(dwborrow$Lending.Federal.Reserve.district), FED = as.numeric(str_extract(unique(dwborrow$Lending.Federal.Reserve.district), "[[:digit:]]+")))
 
-cov <- subset(df, as.Date(df$Date) >= as.Date('2019-03-31') & as.Date(df$Date) <= as.Date('2020-09-30'))
+dfpost <- subset(df, as.Date(Date) >= as.Date('2020-01-01') & as.Date(Date) <= as.Date('2020-12-01') )
 
 
 
@@ -130,12 +130,18 @@ agg$'Borrow Share' <- agg$dw_freq/agg$total_borrow
   print(xtable(data.frame(agg), type = "latex", include.rownames=FALSE))
   
 # Share of banks that borrow (2019-2020) ----
-plot1 <- cov %>% count(Date, dwborrow_bin)
+plot1 <- data.frame(dfpost) %>% count(Date, bigsmall)
 ggplot(data.frame(plot1), aes(fill=dwborrow_bin, y=n, x=Date)) + 
   geom_bar(position="stack", stat="identity")
 
+
+# Share of banks that borrow from PPP loans as total bank. From the data, for q2 and q3 of 2020, 91% of large banks borrowed from the PPPLF and only 80% of small banks borrowed ----
+plot1 <- data.frame(dfpost) %>% count(Date, bigsmall)
+plot1 <- na.omit(left_join(plot1, aggregate(ppp_bin ~ Date + bigsmall, df, FUN = sum), by=c('Date','bigsmall')))
+plot1$frac <- plot1$ppp_bin/plot1$n
+
 # Graph about share of banks that borrow in each district in Q1 2020 ====
-plot1 <- subset(df, as.Date(Date) == as.Date('2019-06-30')) %>% count(Date, FED, dwborrow_bin) 
+plot1 <- subset(df, as.Date(Date) >= as.Date('2020-03-30')) %>% count(FED, dwborrow_bin) 
 plot1 <- data.frame(reshape(plot1, idvar='FED', timevar = 'dwborrow_bin', direction='wide'))
 plot1$borrow_share <- plot1$n.1/(plot1$n.0+plot1$n.1)
 ggplot(data.frame(plot1[1:12,c(1,6)]), aes(x=as.factor(FED), y = borrow_share)) + geom_col()

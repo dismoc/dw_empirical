@@ -86,7 +86,6 @@ df1 <- df1[ , -which(names(df1) %in% c("agg_access"))]
 df <- df1  
 rm(df1)  
 
-
 #Adding additional series - reserve asset ratio and reserve deposit ratio, 
 df$dw_freq[is.na(df$dw_freq)] <- 0
 df$dwborrow_bin <- ifelse(df$dw_freq > 0, 1, 0)
@@ -98,6 +97,16 @@ df[is.infinite(df$reserve_deposit_ratio),c('reserve_deposit_ratio')] <- NA
 df$reserve_deposit_ratio <- Winsorize(df$reserve_deposit_ratio, probs = c(.01,.99), na.rm = TRUE)
 
 df$dwborrow_cov <- ifelse(df$dwborrow_bin == 1 & as.Date(df$Date) >= as.Date('2020-03-31'), 1, 0)
+
+# dwaccess_cov
+ag <- aggregate(dwborrow_cov ~ IDRSSD, data=df, FUN = sum, na.rm = TRUE)
+setnames(ag, old=c('dwborrow_cov'), new=c('freq_cov'))
+df1 <- left_join(df, ag)
+df1$dwaccess_cov <- ifelse(df1$freq_cov > 0, 1, 0)
+df1$dwaccess_cov[is.na(df1$dwaccess_cov)] = 0
+df1 <- df1[ , -which(names(df1) %in% c("freq"))]
+df <- df1
+rm(df1,ag)
 
 
 rm(effr, int_rate)
