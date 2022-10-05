@@ -140,11 +140,6 @@ plot1 <- data.frame(dfpost) %>% count(Date, bigsmall)
 plot1 <- na.omit(left_join(plot1, aggregate(ppp_bin ~ Date + bigsmall, df, FUN = sum), by=c('Date','bigsmall')))
 plot1$frac <- plot1$ppp_bin/plot1$n
 
-# Graph about share of banks that borrow in each district in Q1 2020 ====
-plot1 <- subset(df, as.Date(Date) >= as.Date('2020-03-30')) %>% count(FED, dwborrow_bin) 
-plot1 <- data.frame(reshape(plot1, idvar='FED', timevar = 'dwborrow_bin', direction='wide'))
-plot1$borrow_share <- plot1$n.1/(plot1$n.0+plot1$n.1)
-ggplot(data.frame(plot1[1:12,c(1,6)]), aes(x=as.factor(FED), y = borrow_share)) + geom_col()
 
 # Share of banks that borrow went from .9% in Q42019 to 4.5% in Q1 2020 and 4% in Q2 2020, huge spike initially then dies down.
 plot1 <- reshape(subset(df, as.Date(Date) >= as.Date('2019-03-31')) %>% count(Date, dwborrow_bin), idvar = 'Date', timevar = 'dwborrow_bin', direction = 'wide')
@@ -161,4 +156,34 @@ mean(plot1[39:41,4])
 # Comparing exposure to local economic condition (measured by Philly coincident index) between large and small banks
 aggregate(exposure ~ Date + dwborrow_bin, subset(df, as.Date(Date) >= as.Date('2019-09-30')), FUN = mean)
 
+# Exposure is highly volatile in the the three periods of COVID (SD: 11.03 vs .95 in the 3 periods before COVID)
+descr(subset(df, as.Date(Date) >= as.Date('2020-01-01') & as.Date(Date) <= as.Date('2020-12-01') )$exposure)
+descr(subset(df, as.Date(Date) <= as.Date('2020-01-01') & as.Date(Date) >= as.Date('2019-04-01'))$exposure)
+
+
+# Reserve to deposit ratio for 2018-2019 is 7.9% for all banks, post-COVID, non-borrower has 11.6% and borrowers had 7.8%
+mean(aggregate(reserve_deposit_ratio ~ Date + dwborrow_cov, subset(dfpre, as.Date(Date) >= as.Date('2018-01-01')), FUN = mean)[,3]) #pre
+mean(aggregate(reserve_deposit_ratio ~ Date + dwborrow_cov, dfpost, FUN = mean)[1:3,3]) #nonborrower
+mean(aggregate(reserve_deposit_ratio ~ Date + dwborrow_cov, dfpost, FUN = mean)[4:6,3]) #borrower
+
+# Looking at total deposits in the banking system, there was an average of 1B precovid, then 1.6B for nonborrowers and 5.8B for borrowers
+mean(aggregate(RCON2200 ~ Date + dwborrow_cov, subset(df, as.Date(Date) >= as.Date('2018-01-01') ), FUN = mean)[,3]) #pre total
+mean(aggregate(RCON2200 ~ Date + dwborrow_cov, subset(df, as.Date(Date) >= as.Date('2018-01-01')), FUN = mean)[,3]) #pre nonborrower
+mean(aggregate(RCON2200 ~ Date + dwborrow_cov, subset(df, as.Date(Date) >= as.Date('2018-01-01')), FUN = mean)[,3]) #pre borrower
+mean(aggregate(RCON2200 ~ Date + dwborrow_cov, dfpost, FUN = mean)[1:3,3]) #nonborrower
+mean(aggregate(RCON2200 ~ Date + dwborrow_cov, dfpost, FUN = mean)[4:6,3]) #borrower
+
+#In dense urban areas, there tend to be small number of large banks. In rural areas, there tend to be large number of small banks ----
+plot1 <- left_join(aggregate(size ~ FED + Date, subset(df, as.Date(Date) == as.Date('2020-06-30')), FUN = mean), data.frame(subset(df, as.Date(Date) == as.Date('2020-06-30'))) %>% count(Date, FED))
+
+# Graph about share of banks (count) that borrow in each district as a fraction of total banks in that districtin Q2 2020 ====
+plot1 <- subset(data.frame(df), as.Date(Date) >= as.Date('2020-06-30')) %>% count(FED, dwborrow_bin) 
+plot1 <- data.frame(reshape(plot1, idvar='FED', timevar = 'dwborrow_bin', direction='wide'))
+plot1$borrow_share <- plot1$n.1/(plot1$n.0+plot1$n.1)
+ggplot(data.frame(plot1[1:12,c(1,4)]), aes(x=as.factor(FED), y = borrow_share)) + geom_col()
+
+# Graph about share of borrowing (quantity) that borrow in each district as a share of total borrowing from DW in Q2 2020 ====
+plot1 <- aggregate(dw_quant ~ FED, subset(data.frame(df), as.Date(Date) >= as.Date('2020-06-30')), FUN = sum)
+plot1$borrow_share <- plot1$dw_quant/sum(plot1[,2])
+ggplot(data.frame(plot1[1:12,c(1,3)]), aes(x=as.factor(FED), y = borrow_share)) + geom_col()
 
