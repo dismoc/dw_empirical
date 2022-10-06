@@ -42,6 +42,10 @@ pre <- feols(dwborrow_bin ~ bigsmall + ci_loans_growth + reserve_asset_ratio + s
 etable(post,pre)
 
 # how does uncovered PPP loan affect DW borrowing
-
-regq <- feols(log(dw_quant+1) ~ size + nppp_loan_reserve_ratio + reserve_asset_ratio + log(1+nonppp_loans) + log(RCONLL61+1) + i(FED)| Date, data = dfpost, cluster='FED'); 
+  # gains from this reg: larger banks more likely to borrow, increase in non-ppp loans to reserve weakly increases chance of borrowing, dw borrowing is made by liquidity constrained banks,
+  # increase in borrowing from MMLF decreases chance of borrowing, 
+regq <- feols(log(dw_quant+1) ~ size + nppp_loan_reserve_ratio + reserve_asset_ratio + log(1+nonppp_loans) + log(RCONLL61+1) +  log(ppp_advance+1)+ i(FED)| IDRSSD + Date, data = dfpost, cluster='FED'); 
 regb <- update(regq, dwborrow_bin ~ .); etable(regq, regb)
+
+  #Controlling for loan demand, how much is dw loan and ppp loan substitutes?
+reg <- feols(log(dw_quant+1) ~ log(ppp_advance+1) + log(loans+1) + log(RCONLL58+1) + size| Date + FED, dfpost); etable(reg)

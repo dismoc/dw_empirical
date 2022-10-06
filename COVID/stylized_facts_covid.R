@@ -183,7 +183,13 @@ plot1$borrow_share <- plot1$n.1/(plot1$n.0+plot1$n.1)
 ggplot(data.frame(plot1[1:12,c(1,4)]), aes(x=as.factor(FED), y = borrow_share)) + geom_col()
 
 # Graph about share of borrowing (quantity) that borrow in each district as a share of total borrowing from DW in Q2 2020 ====
-plot1 <- aggregate(dw_quant ~ FED, subset(data.frame(df), as.Date(Date) >= as.Date('2020-06-30')), FUN = sum)
+plot1 <- aggregate(dw_quant ~ FED, subset(data.frame(df), as.Date(Date) == as.Date('2020-06-30')), FUN = sum)
 plot1$borrow_share <- plot1$dw_quant/sum(plot1[,2])
 ggplot(data.frame(plot1[1:12,c(1,3)]), aes(x=as.factor(FED), y = borrow_share)) + geom_col()
+
+# difference in uptake between DW loans and PPPLF loans
+plot1 <- aggregate(RCONLG27 ~ FED, subset(data.frame(df), as.Date(Date) == as.Date('2020-06-30')), FUN = sum)
+plot1$borrow_share <- plot1$RCONLG27/sum(plot1[,2])
+ggplot(data.frame(plot1[1:12,c(1,3)]), aes(x=as.factor(FED), y = borrow_share)) + geom_col()
+
 

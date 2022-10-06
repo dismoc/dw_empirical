@@ -69,8 +69,10 @@ df$loans <- df$RCON2122
 df$loans_growth <- Winsorize((df$RCON2122 - lag(df$RCON2122))/lag(df$RCON2122),probs = c(0.01, 0.99), na.rm = TRUE)
 
 df$ppp_bin <- ifelse(df$RCONLG26 > 0, 1, 0)
+df$ppp_advance <- df$RCONLL59 + df$RCONLL60
 df$ppp_uncovered <- df$RCONLG27 - df$RCONLL59 - df$RCONLL60
-df$nonppp_loans <- (df$RCON5369 + df$RCONB529) - df$RCONLG27
+df$nonppp_loans <- ifelse(is.na(df$RCONLG27) == TRUE, df$RCON2122, df$RCON2122 - df$RCONLG27)
+df$nonppp_loans_growth <- Winsorize((df$nonppp_loans - lag(df$nonppp_loans))/lag(df$nonppp_loans), probs=c(.01,.99), na.rm = TRUE)
 
 df$loan_reserve_ratio <- df$RCON2122/df$RCON0010
 df$nppp_loan_reserve_ratio <- df$nonppp_loans/df$RCON0010
