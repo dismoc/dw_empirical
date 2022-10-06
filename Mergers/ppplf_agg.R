@@ -19,7 +19,12 @@ library('summarytools')
 library(gtools)
 library(lubridate)
 library('fuzzyjoin')
+library(readr)
 
+
+ppb <- read_delim("D:/Research/DW lending empirical/Data/ppp_borrower/query_20211221_082058.csv", 
+                                    delim = "|", escape_double = FALSE, trim_ws = TRUE)
+ppb <- aggregate(currentapprovalamount ~ cert + dateapproved, ppb, FUN = sum)
 # Reading in and merging
 list <- list.files(path="D:/Research/DW lending empirical/Data/PPPLF/", pattern=".xlsx")
 
