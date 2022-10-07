@@ -22,7 +22,7 @@ library('fuzzyjoin')
 library(readr)
 
 
-ppb <- read_delim("D:/Research/DW lending empirical/Data/ppp_borrower/query_20211221_082058.csv", 
+ppr <- read_delim("D:/Research/DW lending empirical/Data/ppp_borrower/query_20211221_082058.csv", 
                                     delim = "|", escape_double = FALSE, trim_ws = TRUE)
 ppb <- aggregate(currentapprovalamount ~ cert + dateapproved, ppb, FUN = sum)
 # Reading in and merging
@@ -38,4 +38,8 @@ for (i in 2:length(list)){
 pp$origin_date <- as.Date(ifelse(year(pp$Date.Of.Maturity) == 2022, 
                          as.Date(pp$Date.Of.Maturity, format = '%Y-%m-%d') - years(2),
                          as.Date(pp$Date.Of.Maturity, format = '%Y-%m-%d') - years(5)))
-pp$processing_time <- difftime(pp$Date.Of.Advance,pp$origin_date, units = 'days')
+
+pp <- pp[!duplicated(pp[c('Date.Of.Advance','Original.Outstanding.Advance.Amount')]),]
+pp$Date.Of.Advance <- as.Date(pp$Date.Of.Advance)
+
+pp$processing_time <- Winsorize((pp$Date.Of.Advance-pp$origin_date),minval=0, probs=c(.00,1),na.rm=TRUE)

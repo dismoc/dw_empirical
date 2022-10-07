@@ -36,4 +36,7 @@ for (i in 2:length(list)){
 
 rm(dfpn)
 dfp$DateApproved <- as.Date(dfp$DateApproved,'%m/%d/%Y')
-pp1 <- aggregate(InitialApprovalAmount ~ DateApproved, dfp, FUN = sum)
+ppb <- aggregate(InitialApprovalAmount ~ DateApproved, dfp, FUN = sum)
+
+write.csv(dfp,"D:\\Research\\DW lending empirical\\Data\\ppp_full.csv")
+write.csv(ppb,"D:\\Research\\DW lending empirical\\Data\\ppp_daily.csv")

@@ -22,11 +22,11 @@ library('fuzzyjoin')
 library(readr)
 library('ggpubr')
 
-ppb <- read_delim("D:/Research/DW lending empirical/Data/ppp_borrower/query_20211221_082058.csv", 
-                  delim = "|", escape_double = FALSE, trim_ws = TRUE)
-ppb <- aggregate(InitialApprovalAmount ~ dateapproved, ppb, FUN = sum)
-
+# Import ----
+ppb <- read_csv("D:/Research/DW lending empirical/Data/ppp_daily.csv")
 dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
+
+# Transformation ----
 dwborrow1 <- dwborrow %>% count(Loan.date)
 dwborrow <- aggregate(Loan.amount ~ Loan.date, dwborrow, FUN = sum)
 dwborrow <- subset(full_join(dwborrow,dwborrow1), as.Date(Loan.date) >= as.Date('2020-01-01'))
@@ -53,32 +53,36 @@ ind <- which(is.na(sf$n) == TRUE)
 sf[ind-1,'InitialApprovalAmount'] <- sf[ind-1,'InitialApprovalAmount'] + sf[ind,'InitialApprovalAmount']
 sf <- sf[-ind,]
 
-
+# Creation ----
 sf$InitialApprovalAmount <- ifelse(is.na(sf$InitialApprovalAmount) == TRUE & as.Date(sf$DateApproved) <= as.Date('2020-04-02'), 0, sf$InitialApprovalAmount)
 sf$InitialApprovalAmount <- ifelse(is.na(sf$InitialApprovalAmount) == TRUE & as.Date(sf$DateApproved) >= as.Date('2020-08-10'), 0, sf$InitialApprovalAmount)
-sf$quant_week_avg <- rollapply(sf$InitialApprovalAmount, 5, mean, na.rm=TRUE, fill = NA, partial=4)
-sf$dw_quant_avg <- rollapply(sf$Loan.amount, 5, mean, na.rm=TRUE, fill = NA, partial=4)
+sf$quant_week_avg <- rollapply(sf$InitialApprovalAmount, 7, mean, na.rm=TRUE, fill = NA, partial=4)
+sf$dw_quant_avg <- rollapply(sf$Loan.amount, 7, mean, na.rm=TRUE, fill = NA, partial=4)
 sf$id <- 1
 sf$signal <- ifelse(as.Date(sf$DateApproved) >= as.Date('2020-03-16') & as.Date(sf$DateApproved) <= as.Date('2020-03-21'), 1, 0)
 sf$preppp <- ifelse(as.Date(sf$DateApproved) <= as.Date('2020-04-02'), 0, 1)
 
-tikz(file = "plot_test.tex", width = 5, height = 5)
+
+# Figures ----
 ggplot(sf) +
-  geom_line(aes(x = DateApproved, y = quant_week_avg/10, colour ='PPP')) +
+  geom_line(aes(x = DateApproved, y = quant_week_avg/3, colour ='PPP')) +
   geom_line(aes(x = DateApproved, y = dw_quant_avg, colour ='DW')) +
-  scale_y_continuous(name = "Moving Avg of DW Loan", sec.axis = sec_axis(~.*10, name="Moving Avg of PPP Loan")) +
+  scale_y_continuous(name = "Moving Avg of DW Loan", sec.axis = sec_axis(~.*3, name="Moving Avg of PPP Loan")) +
   labs(x="Date") + theme(legend.position = c(.9, .9))
-dev.off()
+
+ggplot(sf) +
+  geom_line(aes(x = DateApproved, y = log(quant_week_avg+1), colour ='PPP')) +
+  geom_line(aes(x = DateApproved, y = log(dw_quant_avg+1), colour ='DW')) +
+  labs(x="Date") + theme(legend.position = c(.9, .9))
 
 
+#Regressions ----
 dict1 <- c('log(InitialApprovalAmount)' = 'PPP', 'log(quant_week_avg)' = 'Avg Weekly PPP', 'log(Loan.amount)' = 'DW Quant',
            'log(dw_quant_avg)' = 'Avg Weekly DW Quant')
 
 r1 <- feols(log(Loan.amount) ~ log(l(InitialApprovalAmount)) + log(l(Loan.amount)), sf, panel.id = ~id + DateApproved, se='iid')
-r2 <- update(r1, Loan.amount ~ InitialApprovalAmount)
 r3 <- feols(log(dw_quant_avg) ~ log(quant_week_avg), sf, panel.id = ~id + DateApproved, se='iid')
-r4 <- update(r3, dw_quant_avg ~  quant_week_avg)
-etable(r1,r2,r3,r4, dict= dict1,
+etable(r1,r3, dict= dict1,
        drop = '(Intercept)',
        se = 'white',
        tex = F)
