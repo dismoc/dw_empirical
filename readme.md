@@ -1,5 +1,7 @@
 # Bank Heterogeneity and Discount Window Access: Theory and Evidence
 
+[Paper](https://github.com/dismoc/dw_empirical/blob/main/Public_Private_liquidity_provision.pdf)
+
 1.Data Includes :  Call Reports, Definitions, DW Borrowing (Quarterly)
 
 2.Mergers combine multiple files into one, rest of code is for analysis on the banking data.
