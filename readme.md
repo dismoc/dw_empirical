@@ -17,3 +17,5 @@ matching failures in the interbank market and provides an outside option that li
 the rents that lender banks can capture. The outside option role shows up as a lower
 interest rate in the federal funds market, and the insurance role explains lower reserve
 holdings and lower lending volume as a result
+
+Data available upon request.
