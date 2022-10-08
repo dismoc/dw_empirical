@@ -15,6 +15,7 @@ library('zoo')
 library('fixest')
 library('timeDate')
 library('xtable')
+library('scales')
 
 # Purpose is to see reseve / asset to fed lending in each district during covid quarters
 dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
@@ -192,4 +193,16 @@ plot1 <- aggregate(RCONLG27 ~ FED, subset(data.frame(df), as.Date(Date) == as.Da
 plot1$borrow_share <- plot1$RCONLG27/sum(plot1[,2])
 ggplot(data.frame(plot1[1:12,c(1,3)]), aes(x=as.factor(FED), y = borrow_share)) + geom_col()
 
+# Show the share of loans that are non-ppp and ppp since 2019
+plot1 <- subset(df, as.Date(Date) >= as.Date('2019-01-01'))
+plot1[is.na(plot1$RCONLG27) == TRUE,'RCONLG27'] <- 0
+plot1 <- aggregate(cbind(nonppp_loans,RCONLG27) ~ Date, plot1, sum)
+plot1 <- plot1 %>% gather('Loan Type', val,-Date)
+plot1$Date <- as.Date(plot1$Date)
+plot1$`Loan Type` <- ifelse(plot1$`Loan Type` == 'RCONLG27', 'PPP Loans', 'Non-PPP Loans')
+ggplot(plot1, aes(x=Date,y=val,fill=`Loan Type`)) + geom_area() +
+  scale_y_continuous(labels = unit_format(unit = "T", scale = 1e-9)) +
+  ylab('Quantity') + theme(legend.position = c(.2, .5)) +
+  scale_color_hue(labels = c("T999", "T888")) +
+  scale_x_date(breaks = date_breaks("3 months"))
 
