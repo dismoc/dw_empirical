@@ -124,6 +124,6 @@ df <- df1
 rm(df1,ag)
 
 
-rm(effr, int_rate)
+rm(effr, int_rate, def)
 #Save File ----
 write.csv(df,"D:\\Research\\DW lending empirical\\Data\\merged_cov.csv")

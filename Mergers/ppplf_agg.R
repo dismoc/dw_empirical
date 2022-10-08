@@ -43,3 +43,5 @@ pp <- pp[!duplicated(pp[c('Date.Of.Advance','Original.Outstanding.Advance.Amount
 pp$Date.Of.Advance <- as.Date(pp$Date.Of.Advance)
 
 pp$processing_time <- Winsorize((pp$Date.Of.Advance-pp$origin_date),minval=0, probs=c(.00,1),na.rm=TRUE)
+
+write.csv(pp,"D:\\Research\\DW lending empirical\\Data\\ppplf_full.csv")
