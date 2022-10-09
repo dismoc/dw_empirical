@@ -216,3 +216,5 @@ plot1$Date <- as.character(plot1$Date)
 plot1$Amount <- paste0(round(plot1$Amount/1e9,2),' B')
 plot1$Mean <- paste0(round(plot1$Mean/1e6,2),' M')
 print(xtable(plot1), include.rownames=FALSE)
+
+# Plot quantile of PPP loans.
