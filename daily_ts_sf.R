@@ -119,9 +119,32 @@ pppm <- read_csv("D:/Research/DW lending empirical/Data/ppp_bankmatched.csv")
 
 # Aggregate Data 2: correlation between dw borrowing (binary) and uncovered ppp loans (ppp loans - ppplf advance) -------
 # Bank Level Data
-  sf <- left_join(pppm,unique(pplf[,c('Institution.RSSD','Institution.ABA')]),by=c('rssd' = 'Institution.RSSD'))
-  sf <- full_join(data.frame(pppm), data.frame(aggregate(Original.Outstanding.Advance.Amount ~ Institution.RSSD + Date.Of.Advance, pplf, sum)),
+  sf <- left_join(pppm,unique(pplf[,c('Institution.RSSD','Institution.ABA')]),by=c('rssd' = 'Institution.RSSD')) %>% select(-contains("..."))
+  sf <- full_join(sf, data.frame(aggregate(Original.Outstanding.Advance.Amount ~ Institution.RSSD + Date.Of.Advance, pplf, sum)),
                   by=c('rssd' = 'Institution.RSSD', 'DateApproved' = 'Date.Of.Advance')) %>% select(-contains("..."))
-  sf <- left_join(sf,dwborrow, by=c('Institution.ABA' = 'Borrower.ABA.number'))
-  sf[!is.na(sf$Institution.ABA),]
+  sf <- left_join(sf,dwborrow[,c('Loan.date','Borrower.ABA.number','Loan.amount')], by=c('Institution.ABA' = 'Borrower.ABA.number', 'DateApproved' = 'Loan.date'))
+  temp <- subset(df, as.Date(Date) == as.Date('2020-03-31'))[,c('IDRSSD','reserve_asset_ratio','reserve_loan_ratio')]
+  temp$IDRSSD <- as.numeric(as.character(temp$IDRSSD))
+  sf <- left_join(sf, temp, by=c('rssd' = 'IDRSSD'))
+  
+  sf[is.na(sf$Original.Outstanding.Advance.Amount),c('Original.Outstanding.Advance.Amount')] <- 0
+  sf[is.na(sf$Loan.amount),c('Loan.amount')] <- 0
+  setnames(sf, old=c('DateApproved','InitialApprovalAmount', 'Original.Outstanding.Advance.Amount', 'Loan.amount','OriginatingLenderState'),
+           new = c('Date','PPP','PPPLF','DW','State'))
+  sf$dw_bin <- ifelse(sf$DW > 0, 1, 0)
+  sf$r_delt <- -sf$PPPLF + sf$PPP  
+  sf <- sf[order(sf$rssd,sf$Date),]
+  sf$month <- month(sf$Date)
+  sf <- sf %>% mutate(quintile = ntile(r_delt, 5))
+  
+  # Binary regressions + robustness
+  feols(dw_bin ~ asinh(r_delt) + reserve_asset_ratio + reserve_loan_ratio | State + month, sf, se='white')
+  feols(dw_bin ~ quintile + reserve_asset_ratio + reserve_loan_ratio| State + month, sf, se='white') #increasing reserve demand by 1 decile increases borrowing probability by
+  feglm(dw_bin ~ quintile + reserve_asset_ratio + reserve_loan_ratio| State + month, sf, se = 'white', family = binomial(link = "logit"))
+  feglm(dw_bin ~ quintile + reserve_asset_ratio + reserve_loan_ratio| State + month, sf, se = 'white', family = binomial(link = "probit"))
+ 
+  # Elasticity regressions
+  feols(asinh(DW) ~ asinh(r_delt) + reserve_asset_ratio + reserve_loan_ratio| State + month, sf, se='white') #increasing reserve demand by 1 decile increases borrowing probability by
+  feols(log(DW) ~ quintile + reserve_asset_ratio + reserve_loan_ratio| State + month, sf, se='white') #increasing reserve demand by 1 decile increases borrowing probability by
+
   

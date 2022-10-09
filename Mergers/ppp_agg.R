@@ -43,6 +43,7 @@ dfp <- left_join(dfp, matchlb[,c('loannumber','rssd')], by=c('LoanNumber' = 'loa
 ppb <- aggregate(InitialApprovalAmount ~ DateApproved, dfp, FUN = sum)
 
 dfn <- left_join(aggregate(InitialApprovalAmount ~ rssd + DateApproved, dfp, sum), dfp %>% count(rssd, DateApproved))
+dfn <- left_join(dfn, unique(dfp[,c('rssd','OriginatingLenderState')]))
 
 write.csv(dfp,"D:\\Research\\DW lending empirical\\Data\\ppp_full.csv")
 write.csv(ppb,"D:\\Research\\DW lending empirical\\Data\\ppp_daily.csv")

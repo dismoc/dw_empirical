@@ -206,3 +206,13 @@ ggplot(plot1, aes(x=Date,y=val,fill=`Loan Type`)) + geom_area() +
   scale_color_hue(labels = c("T999", "T888")) +
   scale_x_date(breaks = date_breaks("3 months"))
 
+# Show the number of discount window borrowing in each quarter
+plot1 <- left_join(dwborrow[as.Date(dwborrow$Date) > as.Date('2019-06-01'),] %>% count(Date),
+          aggregate(Loan.amount ~ Date, dwborrow[as.Date(dwborrow$Date) > as.Date('2019-06-01'),], sum))
+plot1 <- left_join(plot1,
+                   aggregate(Loan.amount ~ Date, dwborrow[as.Date(dwborrow$Date) > as.Date('2019-06-01'),], median), by='Date')
+setnames(plot1, old=c('n','Loan.amount.x','Loan.amount.y'), new=c('Count','Amount','Mean'))
+plot1$Date <- as.character(plot1$Date)
+plot1$Amount <- paste0(round(plot1$Amount/1e9,2),' B')
+plot1$Mean <- paste0(round(plot1$Mean/1e6,2),' M')
+print(xtable(plot1), include.rownames=FALSE)
