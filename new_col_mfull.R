@@ -81,3 +81,5 @@ df$ppp_loan_reserve_ratio
 df <- df %>%
   group_by(IDRSSD, Date) %>%
   slice(n())
+df <- data.frame(df)
+df$IDRSSD <- as.numeric(as.character(df$IDRSSD))

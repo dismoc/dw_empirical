@@ -228,5 +228,8 @@ ggplot(plot1[2:nrow(plot1),], aes(x=Percentile, y=Share.of.Reserves)) + geom_poi
   theme(text = element_text(size = 18))
 
 #What share of banks go to PPPLF and DW?
-plot1 <- aggregate(cbind(PPPLF, DW) ~ rssd, sf2, sum)
-length(subset(plot1, plot1$PPPLF > 0 & plot1$DW>0)$rssd)
+length(na.omit(match(unique(pplf$Institution.ABA),subset(dwborrow,Loan.date >= as.Date('2020-04-03') & Loan.date <= as.Date('2020-08-08'))$Borrower.ABA.number)))
+# Banks that lend PPP loans?
+length(unique(subset(temp, RCONLG27>0)$IDRSSD))
+# Banks that borrow from PPPLF
+length(unique(subset(temp, RCONLL59 + RCONLL60>0)$IDRSSD))
