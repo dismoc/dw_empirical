@@ -204,7 +204,8 @@ ggplot(plot1, aes(x=Date,y=val,fill=`Loan Type`)) + geom_area() +
   scale_y_continuous(labels = unit_format(unit = "T", scale = 1e-9)) +
   ylab('Quantity') + theme(legend.position = c(.2, .5)) +
   scale_color_hue(labels = c("T999", "T888")) +
-  scale_x_date(breaks = date_breaks("3 months"))
+  scale_x_date(breaks = date_breaks("3 months")) +
+  theme(text = element_text(size = 16))
 
 # Show the number of discount window borrowing in each quarter
 plot1 <- left_join(dwborrow[as.Date(dwborrow$Date) > as.Date('2019-06-01'),] %>% count(Date),
@@ -218,3 +219,14 @@ plot1$Mean <- paste0(round(plot1$Mean/1e6,2),' M')
 print(xtable(plot1), include.rownames=FALSE)
 
 # Plot quantile of PPP loans.
+
+# Stylized Facts - Quantile graph of demand shock to reserves
+plot1 <- data.frame(Percentile = 0:100, `Share of Reserves` = quantile(sf2$demand_so_reserves, seq(0,1,by=.01), na.rm = TRUE))
+ggplot(plot1[2:nrow(plot1),], aes(x=Percentile, y=Share.of.Reserves)) + geom_point() +
+  scale_y_log10() + scale_x_continuous(breaks=seq(0,100,by=5)) +
+  ylab('Demand Share of Reserves') +
+  theme(text = element_text(size = 18))
+
+#What share of banks go to PPPLF and DW?
+plot1 <- aggregate(cbind(PPPLF, DW) ~ rssd, sf2, sum)
+length(subset(plot1, plot1$PPPLF > 0 & plot1$DW>0)$rssd)
