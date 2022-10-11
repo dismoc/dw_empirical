@@ -91,9 +91,9 @@ df$dw_freq[is.na(df$dw_freq)] <- 0
 df$dwborrow_bin <- ifelse(df$dw_freq > 0, 1, 0)
 
 
-df$reserve_asset_ratio <- df$RCON0010/df$RCON2170
-df$reserve_deposit_ratio <- df$RCON0010/df$RCON2200
-df$reserve_loan_ratio <- df$RCON0010/df$RCON2122
+df$reserve_asset_ratio <- (df$RCON0081+df$RCON0071)/df$RCON2170
+df$reserve_deposit_ratio <- (df$RCON0081+df$RCON0071)/df$RCON2200
+df$reserve_loan_ratio <- (df$RCON0081+df$RCON0071)/df$RCON2122
 df[is.infinite(df$reserve_deposit_ratio),c('reserve_deposit_ratio')] <- NA
 df$reserve_deposit_ratio <- Winsorize(df$reserve_deposit_ratio, probs = c(.01,.99), na.rm = TRUE)
 
