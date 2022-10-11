@@ -80,7 +80,6 @@ for (i in 1:length(ls)) {
     
     for (m in 2:length(n)) {
       crdat1[, colnames(crdat1) %in% list[1,1]] <- coalesce(as.numeric(eval(parse(text=paste0("crdat1$",list[1,1])))), as.numeric(eval(parse(text=paste0("crdat1$",list[m,1])))))
-      #crdat1 <- crdat1 %>% select(-contains(list[,1]))
     }
     crdat1 <- crdat1 %>% select(-contains(list[2:length(n),1]))
     rm(k, list, j, m)
@@ -99,4 +98,4 @@ crdat <- left_join(crdat, inst1, by= 'IDRSSD')
 rm(inst, inst1, defs)
 
 
-write.csv(crdat,"D:\\Research\\DW lending empirical\\Data\\call_rep_full1.csv")
+write.csv(crdat,"D:\\Research\\DW lending empirical\\Data\\call_rep_full.csv")
