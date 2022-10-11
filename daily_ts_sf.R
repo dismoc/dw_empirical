@@ -28,7 +28,7 @@ ppb <- read_csv("D:/Research/DW lending empirical/Data/ppp_daily.csv")
 dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
 pplf <- read_csv("D:/Research/DW lending empirical/Data/ppplf_full.csv")
 pppm <- read_csv("D:/Research/DW lending empirical/Data/ppp_bankmatched.csv")
-
+att <- read_csv("D:/Research/DW lending empirical/Data/ffiec/Atrributes_merged.csv")[,c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM')]
 
 # Aggregate Data 1: Correlation between dw borrowing (aggregate) and aggregate ppp loans-------
   # Transformation
@@ -145,10 +145,17 @@ pppm <- read_csv("D:/Research/DW lending empirical/Data/ppp_bankmatched.csv")
 
 # Aggregate Data 2: correlation between dw borrowing (binary) and uncovered ppp loans (ppp loans - ppplf advance) -------
 # Bank Level Data: -----
-  temp <- subset(df, as.Date(Date) == as.Date('2020-06-30'))
-  sf2 <- left_join(pppm,unique(pplf[,c('Institution.RSSD','Institution.ABA')]),by=c('rssd' = 'Institution.RSSD')) %>% select(-contains("..."))
+  
+  temp <- subset(df, as.Date(Date) == as.Date('2020-03-31'))
+  
+  sf2 <- aggregate(InitialApprovalAmount ~ rssd + DateApproved, pppm, sum)
+  sf2 <- left_join(sf2, att, by=c('rssd' = '#ID_RSSD'))
+  sf2 <- full_join(pppm,unique(pplf[,c('Institution.RSSD','Institution.ABA')]),by=c('rssd' = 'Institution.RSSD')) %>% select(-contains("..."))
+  sf2$ABA <- ifelse(sf2$ID_ABA_PRIM == 0 | is.na(sf2$ID_ABA_PRIM) == TRUE, sf2$Institution.ABA, sf2$ID_ABA_PRIM)
+  sf2 <- data.frame(RSSD = sf2$rssd, Date = sf2$DateApproved, ABA = sf2$ABA, State = sf2$OriginatingLenderState, PPP = sf2$InitialApprovalAmount)
+  
   sf2 <- full_join(sf2, data.frame(aggregate(Original.Outstanding.Advance.Amount ~ Institution.RSSD + Date.Of.Advance, pplf, sum)),
-                  by=c('rssd' = 'Institution.RSSD', 'DateApproved' = 'Date.Of.Advance')) %>% select(-contains("..."))
+                  by=c('RSSD' = 'Institution.RSSD', 'Date' = 'Date.Of.Advance')) %>% select(-contains("..."))
   sf2 <- left_join(sf2,dwborrow[,c('Loan.date','Borrower.ABA.number','Loan.amount')], by=c('Institution.ABA' = 'Borrower.ABA.number', 'DateApproved' = 'Loan.date'))
   temp <- subset(df, as.Date(Date) == as.Date('2020-03-31'))[,c('size','IDRSSD','reserve_asset_ratio','reserve_loan_ratio','RCON0010','eqcaprat','age')]
   temp$IDRSSD <- as.numeric(as.character(temp$IDRSSD))

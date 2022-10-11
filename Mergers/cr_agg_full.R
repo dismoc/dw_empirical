@@ -18,67 +18,73 @@ library("R.utils")
 
 q <- c("0331","0630","0930","1231")
 y <- c("2010","2011","2012","2013","2014","2015","2016","2017","2018","2019","2020")
-n <- c("RC", "RCA", "RCB", "RCCI","RCCII","RCE","RCEI","RCF","RCG","RCH","RCK","RCL","RCM","RCN","RCP", "RCR", "RCRI", "RCRIA", "RCRIB","RCRII","RI","RIA","RIBI","RIBII", "RIC", "RICI", "RICII")
-m <- c("","(1 of 2)", "(2 of 2)", "(1 of 3)", "(2 of 3)", "(3 of 3)", "(1 of 4)", "(2 of 4)", "(3 of 4)", "(4 of 4)")
 
-crdat <- data.frame(read_delim(paste0("D:/Research/DW lending empirical/Data/call_report/FFIEC CDR Call Bulk All Schedules ",q[4],"2009","/FFIEC CDR Call Schedule ", n[1]," ", q[4], "2009",".txt"),show_col_types = FALSE)[-1,])
-for (k in 2:length(n)){
-  for (v in 1:length(m)){
-    try(
-      crdat <- crdat %>% full_join(
-      data.frame(read_delim(paste0("D:/Research/DW lending empirical/Data/call_report/FFIEC CDR Call Bulk All Schedules ",q[4],"2009","/FFIEC CDR Call Schedule ",n[k]," ",q[4],"2009",m[v],".txt"),show_col_types = FALSE)[-1,]),
-                       by = "IDRSSD", suffix = c("",".y")) %>% select(-ends_with(".y"), -contains("...")),
-    silent = TRUE)
-  }
+list <- dir(path=paste0("D:/Research/DW lending empirical/Data/call_report/FFIEC CDR Call Bulk All Schedules ",q[4],"2009"), pattern=".txt")
+df <- map(paste0("D:/Research/DW lending empirical/Data/call_report/FFIEC CDR Call Bulk All Schedules ",q[4],"2009/",list),
+          read.delim, stringsAsFactors = FALSE, check.names = FALSE, row.names = NULL, header=TRUE, skip=0)
+
+for (i in 2:length(df)) {
+  df[[i]] <- df[[i]][-1,]
+  df[[i]] <- type.convert(df[[i]])
+  df[[i]]$IDRSSD <- as.numeric(df[[i]]$IDRSSD)
 }
-crdat <- data.frame(sapply(crdat,as.numeric)); crdat$Date <- ymd(paste0(2009,q[4]))
 
+crdat <- df %>% reduce(left_join, suffix = c("",".y"))
+crdat$Date <- as.Date(ymd(paste0(2009,q[4])))
+crdat <- crdat[,colSums(is.na(crdat))<nrow(crdat)]
 
 for (i in 1:length(y)) {
   for(j in 1:length(q)) {
-    crdat_n <- data.frame(read_delim(paste0("D:/Research/DW lending empirical/Data/call_report/FFIEC CDR Call Bulk All Schedules ",q[j],y[i],"/FFIEC CDR Call Schedule ", n[1]," ",q[j],y[i],".txt"),show_col_types = FALSE)[-1,])
-    for (k in 2:length(n)){
-      for (v in 1:length(m)){
-        try(crdat_n <- crdat_n %>% full_join(
-            data.frame(read_delim(paste0("D:/Research/DW lending empirical/Data/call_report/FFIEC CDR Call Bulk All Schedules ",q[j],y[i],"/FFIEC CDR Call Schedule ",n[k]," ",q[j],y[i],m[v],".txt"),show_col_types = FALSE)[-1,]),
-            by = "IDRSSD", suffix = c("",".y")) %>% select(-ends_with(".y"), -contains("...")), silent = TRUE)
-      }
-    }
-    crdat_n <- data.frame(sapply(crdat_n,as.numeric))
-    crdat_n$Date <- ymd(paste0(y[i],q[j]))
+    print(paste0('Starting Loop: ',q[j],y[i]))
+    list <- dir(path=paste0("D:/Research/DW lending empirical/Data/call_report/FFIEC CDR Call Bulk All Schedules ",q[j],y[i],"/"), pattern=".txt")
     
-    crdat <- smartbind(crdat,crdat_n)
-    rm(crdat_n)
+    df <- map(paste0("D:/Research/DW lending empirical/Data/call_report/FFIEC CDR Call Bulk All Schedules ",q[j],y[i],"/",list),
+              read.delim, stringsAsFactors = FALSE, check.names = FALSE, row.names = NULL, header=TRUE, skip=0)
+    for (k in 2:length(df)){
+      df[[k]] <- df[[k]][-c(1),]
+      df[[k]] <- type.convert(df[[k]], as.is=TRUE)
+      df[[k]]$IDRSSD <- as.numeric(df[[k]]$IDRSSD)
+    }
+    crdatn <- df %>% reduce(left_join, suffix = c("",".y"))
+    crdatn$Date <- as.Date(ymd(paste0(y[i],q[j])))
+    crdatn <- crdatn[,colSums(is.na(crdatn))<nrow(crdatn)]
+    crdat <- smartbind(crdat,crdatn)
   }
 }
-rm(i,j,k,v)
+
+rm(i,j,k,v, df, crdatn)
+
 
 # Cleaning ----
 crdat$Date <- as.Date(crdat$Date)
-crdat <- crdat[,colSums(is.na(crdat))<nrow(crdat)]
-crdat1 <- crdat
 
+crdat1 <- crdat
 defs <- data.frame(read.csv("D:/Research/DW lending empirical/Data/call_report/cr_defs.csv"))[,1:9]
 defs$Code <- defs$ï..Code
 defs <- defs[defs$Code %in% colnames(crdat1),]
 
+ls <- unique(defs$Item.Name)
 # deleting columns that mean the same thing, just duplicated reports
-for (i in 1:length(unique(defs$Item.Name))) {
-  n <- unique(defs[defs$Item.Name %in% unique(defs$Item.Name)[i],]$Code)
+for (i in 1:length(ls)) {
+  print(paste0('Begin Loop: ',i))
+  n <- unique(defs[defs$Item.Name %in% ls[i],]$Code)
   if (length(n) > 1) {
     #List sort
     for (j in 1:length(n)) {
-      k[j] = sum(is.na(eval(parse(text=paste0("crdat1$",n[j])))))
+      k <- vector(length = length(n))
+      k[j] <- sum(is.na(eval(parse(text=paste0('crdat$',n[j])))))
     }
     
     list <- data.frame(n,k)
     list <- list[order(list$k),]
     
-    for (k in 2:length(n)) {
-      crdat1[, colnames(crdat1) %in% list[1,1]] <- coalesce(eval(parse(text=paste0("crdat1$",list[1,1]))), eval(parse(text=paste0("crdat1$",list[k,1]))))
-      crdat1 <- crdat1 %>% select(-contains(list[k,1]))
+    for (m in 2:length(n)) {
+      crdat1[, colnames(crdat1) %in% list[1,1]] <- coalesce(as.numeric(eval(parse(text=paste0("crdat1$",list[1,1])))), as.numeric(eval(parse(text=paste0("crdat1$",list[m,1])))))
+      crdat1 <- crdat1 %>% select(-contains(list[m,1]))
     }
+    rm(k, list)
   }
+  print(paste0('End Loop: ',i))
 }
 
 crdat <- crdat1
