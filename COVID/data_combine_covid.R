@@ -57,12 +57,11 @@ inst$IDRSSD <- inst$FED_RSSD
 df <- call_rep %>% left_join(inst[,c('FED','FDICREGN','IDRSSD','OFFICES','BKCLASS','OFFDOM','OFFFOR','STMULT','CHRTAGNT','ESTYMD')], by=('IDRSSD'),
                              suffix = c("",".y")) %>% select(-ends_with(".y"), -contains("..."))
 
+df$Date <- as.Date(df$Date)
 df <- df %>% left_join(sdc, by=c('IDRSSD','Date'), suffix = c("",".y")) %>% select(-ends_with(".y"), -contains("..."))
-rm(sdc)
-
+dcomb$Date <- as.Date(dcomb$Date)
 df <- df %>% left_join(dcomb, by=c('Primary ABA Routing Number' = 'ABA_routing','Date'), suffix = c("",".y")) %>% select(-ends_with(".y"), -contains("..."))
-
-rm(inst, call_rep, dcomb)
+rm(inst, call_rep, dcomb, sdc)
 
 # Adding new columns ----
 

@@ -233,3 +233,9 @@ length(na.omit(match(unique(pplf$Institution.ABA),subset(dwborrow,Loan.date >= a
 length(unique(subset(temp, RCONLG27>0)$IDRSSD))
 # Banks that borrow from PPPLF
 length(unique(subset(temp, RCONLL59 + RCONLL60>0)$IDRSSD))
+
+plot1 <- aggregate(cbind(PPPLF, DW, PPP) ~ RSSD, sf2, sum)
+length(plot1$RSSD) #sample size
+length(subset(plot1, DW > 0 & PPPLF == 0)$RSSD) # just DW
+length(subset(plot1, DW == 0 & PPPLF > 0)$RSSD) # just PPPLF
+length(subset(plot1, DW > 0 & PPPLF > 0)$RSSD) # both

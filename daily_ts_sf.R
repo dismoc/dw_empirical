@@ -21,7 +21,7 @@ library(lubridate)
 library('fuzzyjoin')
 library(readr)
 library('ggpubr')
-
+library(marginaleffects)
 
 # Import
 ppb <- read_csv("D:/Research/DW lending empirical/Data/ppp_daily.csv")
@@ -149,70 +149,75 @@ att <- read_csv("D:/Research/DW lending empirical/Data/ffiec/Atrributes_merged.c
   temp <- subset(df, as.Date(Date) == as.Date('2020-03-31'))
   
   sf2 <- aggregate(InitialApprovalAmount ~ rssd + DateApproved, pppm, sum)
+  sf2 <- full_join(sf2, unique(df[,c('IDRSSD','Primary.ABA.Routing.Number')]), by=c('rssd' = 'IDRSSD'))
   sf2 <- left_join(sf2, att, by=c('rssd' = '#ID_RSSD'))
-  sf2 <- full_join(pppm,unique(pplf[,c('Institution.RSSD','Institution.ABA')]),by=c('rssd' = 'Institution.RSSD')) %>% select(-contains("..."))
-  sf2$ABA <- ifelse(sf2$ID_ABA_PRIM == 0 | is.na(sf2$ID_ABA_PRIM) == TRUE, sf2$Institution.ABA, sf2$ID_ABA_PRIM)
-  sf2 <- data.frame(RSSD = sf2$rssd, Date = sf2$DateApproved, ABA = sf2$ABA, State = sf2$OriginatingLenderState, PPP = sf2$InitialApprovalAmount)
-  
+  sf2$ABA <- coalesce(sf2$Primary.ABA.Routing.Number, sf2$ID_ABA_PRIM)
+  sf2 <- data.frame(RSSD = sf2$rssd, Date = sf2$DateApproved, ABA = sf2$ABA, State = sf2$STATE_ABBR_NM, PPP = sf2$InitialApprovalAmount)
   sf2 <- full_join(sf2, data.frame(aggregate(Original.Outstanding.Advance.Amount ~ Institution.RSSD + Date.Of.Advance, pplf, sum)),
                   by=c('RSSD' = 'Institution.RSSD', 'Date' = 'Date.Of.Advance')) %>% select(-contains("..."))
-  sf2 <- left_join(sf2,dwborrow[,c('Loan.date','Borrower.ABA.number','Loan.amount')], by=c('Institution.ABA' = 'Borrower.ABA.number', 'DateApproved' = 'Loan.date'))
-  temp <- subset(df, as.Date(Date) == as.Date('2020-03-31'))[,c('size','IDRSSD','reserve_asset_ratio','reserve_loan_ratio','RCON0010','eqcaprat','age')]
+  dwborrow$Borrower.ABA.number <- as.numeric(dwborrow$Borrower.ABA.number)
+  dwborrow <- subset(dwborrow,Loan.date >= as.Date('2020-04-03') & Loan.date <= as.Date('2020-08-08'))
+  sf2 <- full_join(sf2,dwborrow[,c('Loan.date','Borrower.ABA.number','Loan.amount')], by=c('ABA' = 'Borrower.ABA.number', 'Date' = 'Loan.date'))
+  temp <- subset(df, as.Date(Date) == as.Date('2020-03-31'))[,c('size','IDRSSD','reserve_asset_ratio','reserve_loan_ratio','RCON0010','eqcaprat','age','borr_total')]
   temp$IDRSSD <- as.numeric(as.character(temp$IDRSSD))
-  sf2 <- left_join(sf2, temp, by=c('rssd' = 'IDRSSD'))
+  sf2 <- left_join(sf2, temp, by=c('RSSD' = 'IDRSSD'))
   
   sf2[is.na(sf2$Original.Outstanding.Advance.Amount),c('Original.Outstanding.Advance.Amount')] <- 0
   sf2[is.na(sf2$Loan.amount),c('Loan.amount')] <- 0
-  setnames(sf2, old=c('DateApproved','InitialApprovalAmount', 'Original.Outstanding.Advance.Amount', 'Loan.amount','OriginatingLenderState'),
-           new = c('Date','PPP','PPPLF','DW','State'))
+  sf2[is.na(sf2$borr_total) == TRUE, 'borr_total'] <- 0
+  setnames(sf2, old=c('Original.Outstanding.Advance.Amount', 'Loan.amount'),
+           new = c('PPPLF','DW'))
   sf2$dw_bin <- ifelse(sf2$DW > 0, 1, 0)
   sf2$PPPLF_ind <- ifelse(sf2$PPPLF > 0, 1, 0)
   sf2$r_delt <- -sf2$PPPLF + sf2$PPP
-  sf2$cumu_shock <- 
-  sf2 <- sf2[order(sf2$rssd,sf2$Date),]
+  sf2 <- sf2[order(sf2$RSSD,sf2$Date),]
+  sf2 <- sf2 %>% group_by(RSSD) %>% mutate(cs_ppp = cumsum(PPP), cs_delt = cumsum(r_delt))
   sf2$month <- month(sf2$Date)
-  sf2$demand_so_reserves <- sf2$r_delt/(sf2$RCON0010*1000)
-  sf2 <- sf2 %>% mutate(rd_quint = ntile(r_delt, 5))
-  sf2 <- sf2 %>% mutate(ds_quint = ntile(demand_so_reserves, 5))
+  sf2$ppp_so_reserves <- sf2$PPP/(sf2$RCON0010*1000)
+  sf2$delt_so_reserves <- sf2$r_delt/(sf2$RCON0010*1000)
+  sf2 <- sf2 %>% mutate(dsr_quint = ntile(delt_so_reserves, 5), psr_quint = ntile(ppp_so_reserves, 5))
   
+  sf3 <- subset(sf2, Date >= as.Date('2020-04-03') & Date <= as.Date('2020-08-30'))
   
   
   # Regression on demand share of reserves using reserve data from Q1 2020
   dict1 <- c('dw_bin' = 'DW Prob', 'demand_so_reserves' = 'Demand Shock', 'reserve_asset_ratio' = 'RA Ratio',
              'size' = 'Log(Asset)', 'log(PPPLF+1)' = 'Log(PPPLF)', 'log(RCON0010)' = 'Log(Reserves)',
-             'eqcaprat' = 'Equity Cap Ratio')
+             'eqcaprat' = 'Equity Cap Ratio', 'ppp_so_reserves' = 'Demand Shock',
+             'ppp_so_reserves x PPPLF_ind' = 'DS*PPPLF_ind', 'log(borr_total+1)' = 'Log(FF Borrowing)')
   
     #Table 1: Binary regression: 1) baseline 2-5) progressively more controls
-    r1 <- feols(dw_bin ~ demand_so_reserves |State + month, subset(sf2, ds_quint>=0))
-    r2 <- update(r1, .~.+reserve_asset_ratio)
-    r3 <- update(r2, .~.+size)
-    r4 <- update(r3, .~. + log(PPPLF+1))
-    r5 <- update(r4, .~.  +eqcaprat)
-  #Main
-    etable(r1,r2,r3,r4,r5, dict=dict1,
-           se='cluster', fitstat=~n+r2, tex=T)
-  #Robustness
-    r6 <- feglm(dw_bin ~ demand_so_reserves + reserve_asset_ratio + size + log(PPPLF+1) + eqcaprat| State + month, sf2, se = 'white', family = binomial(link = "logit"))
-    r7 <- update(r6, family = binomial(link = "probit"))
-    etable(r5,r6,r7, dict=dict1,
-           se='cluster',
-           tex=T)
-    
-    
-  # Binary regressions + robustness
-    r1 <- feols(log(DW+1) ~ log(demand_so_reserves) |State + month, subset(sf2, ds_quint>=0))
-    r2 <- update(r1, .~.+reserve_asset_ratio)
-    r3 <- update(r2, .~.+size)
-    r4 <- update(r3, .~. + log(PPPLF+1))
-    r5 <- update(r4, .~.  +eqcaprat)
+    r1 <- feols(dw_bin ~ log(ppp_so_reserves)*PPPLF_ind |State + month, sf3)
+    r2 <- update(r1, .~. +reserve_asset_ratio)
+    r3 <- update(r2, .~. +size)
+    r4 <- update(r3, .~. +eqcaprat)
+    r5 <- update(r4, .~. +age)
     #Main
     etable(r1,r2,r3,r4,r5, dict=dict1,
-           se='cluster', fitstat=~n+r2, tex=F)
-    #Robustness
-    r6 <- feglm(log(DW) ~ demand_so_reserves + reserve_asset_ratio + size + log(PPPLF+1) + eqcaprat| State + month, sf2, se = 'white', family = binomial(link = "logit"))
+           se='white', fitstat=~n+r2, tex=F)
+  #Robustness
+    r6 <- feglm(dw_bin ~ log(ppp_so_reserves)*PPPLF_ind + reserve_asset_ratio + size + eqcaprat + age | State + month, sf2, se = 'white', family = binomial(link = "logit"))
     r7 <- update(r6, family = binomial(link = "probit"))
     etable(r5,r6,r7, dict=dict1,
-           se='cluster',
+           se='white',
+           tex=F)
+    summary(marginaleffects(r6))
+    
+  # Binary regressions + robustness
+    #Table 1: Binary regression: 1) baseline 2-5) progressively more controls
+    r1 <- feols(dw_bin ~ psr_quint*PPPLF_ind |State + month, sf2)
+    r2 <- update(r1, .~. +reserve_asset_ratio)
+    r3 <- update(r2, .~. +size)
+    r4 <- update(r3, .~. +eqcaprat)
+    r5 <- update(r4, .~. +age)
+    #Main
+    etable(r1,r2,r3,r4,r5, dict=dict1,
+           se='white', fitstat=~n+r2, tex=F)
+    #Robustness
+    r6 <- feglm(dw_bin ~ log(ppp_so_reserves)*PPPLF_ind + reserve_asset_ratio + size + eqcaprat + age | State + month, sf2, se = 'white', family = binomial(link = "logit"))
+    r7 <- update(r6, family = binomial(link = "probit"))
+    etable(r5,r6,r7, dict=dict1,
+           se='white',
            tex=F)
     
   # Elasticity regressions
