@@ -166,7 +166,9 @@ att <- read_csv("D:/Research/DW lending empirical/Data/ffiec/Atrributes_merged.c
   setnames(sf2, old=c('DateApproved','InitialApprovalAmount', 'Original.Outstanding.Advance.Amount', 'Loan.amount','OriginatingLenderState'),
            new = c('Date','PPP','PPPLF','DW','State'))
   sf2$dw_bin <- ifelse(sf2$DW > 0, 1, 0)
-  sf2$r_delt <- -sf2$PPPLF + sf2$PPP  
+  sf2$PPPLF_ind <- ifelse(sf2$PPPLF > 0, 1, 0)
+  sf2$r_delt <- -sf2$PPPLF + sf2$PPP
+  sf2$cumu_shock <- 
   sf2 <- sf2[order(sf2$rssd,sf2$Date),]
   sf2$month <- month(sf2$Date)
   sf2$demand_so_reserves <- sf2$r_delt/(sf2$RCON0010*1000)

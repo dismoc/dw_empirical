@@ -23,15 +23,13 @@ library('xtable')
 
 
 # Merging the data tables ----
-
+call_rep <- read_csv("D:/Research/DW lending empirical/Data/call_rep_full.csv")
 effr <- read_csv("D:/Research/DW lending empirical/Data/effr_range.csv")
 dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
-call_rep <- read_csv("D:/Research/DW lending empirical/Data/call_rep_full.csv")
 int_rate <- read_excel("D:/Research/DW lending empirical/Data/int_rates.xls")
 sdc <- read_csv("D:/Research/DW lending empirical/Data/sdc_full.csv")
 def <- read_csv("D:/Research/DW lending empirical/Data/defs.csv")
 inst <-read_csv("D:/Research/DW lending empirical/Data/INSTITUTIONS2.CSV")
-att <- read_csv("D:/Research/DW lending empirical/Data/ffiec/Atrributes_merged.csv")
 int_rate$Date <- as.Date(int_rate$Date)
 
 
@@ -40,7 +38,7 @@ y <- c("2010","2011","2012","2013","2014","2015","2016","2017","2018","2019","20
 
 
 dwbsub <- subset(dwborrow, Type.of.credit == "Primary Credit")
-dwbsub <- subset(dwbsub, dwbsub$Loan.amount >= 1000000)
+dwbsub <- subset(dwbsub, dwbsub$Loan.amount >= 100000)
 dwbsub$Date <- data.frame(timeLastDayInQuarter(dwbsub$Loan.date, format = "%Y-%m-%d", zone = "", FinCenter = ""))$GMT.x..i..
 dwbsub$repay <- (dwbsub$Interest.rate*dwbsub$Term/36000)*dwbsub$Loan.amount
 
@@ -55,19 +53,16 @@ dcomb$avg.int <- 36000*dcomb$repay/dcomb$`Loan.amount * Term`
 setnames(dcomb, old = c('Borrower.ABA.number','Date','Term','Loan.amount * Term','repay','avg.int'),
          new = c('ABA_routing','Date','dw_freq','dw_quant','repay','avg_int'))
 dcomb$ABA_routing <- as.numeric(dcomb$ABA_routing)
-att$ABA_routing <- att$ID_ABA_PRIM; att$IDRSSD <- att$`#ID_RSSD`
-dc <- left_join(dcomb, att[,c('ABA_routing','IDRSSD','D_DT_START','ID_FDIC_CERT','ID_OCC')], by = c('ABA_routing'))
 inst$IDRSSD <- inst$FED_RSSD
 df <- call_rep %>% left_join(inst[,c('FED','FDICREGN','IDRSSD','OFFICES','BKCLASS','OFFDOM','OFFFOR','STMULT','CHRTAGNT','ESTYMD')], by=('IDRSSD'),
                              suffix = c("",".y")) %>% select(-ends_with(".y"), -contains("..."))
 
-df <- df %>% full_join(sdc, by=c('IDRSSD','Date'), suffix = c("",".y")) %>% select(-ends_with(".y"), -contains("..."))
+df <- df %>% left_join(sdc, by=c('IDRSSD','Date'), suffix = c("",".y")) %>% select(-ends_with(".y"), -contains("..."))
 rm(sdc)
 
-df <- df %>% left_join(dc, by=c('IDRSSD','Date'), suffix = c("",".y")) %>% select(-ends_with(".y"), -contains("..."))
+df <- df %>% left_join(dcomb, by=c('Primary ABA Routing Number' = 'ABA_routing','Date'), suffix = c("",".y")) %>% select(-ends_with(".y"), -contains("..."))
 
-rm(dc, dcomb, att)
-rm(inst, call_rep)
+rm(inst, call_rep, dcomb)
 
 # Adding new columns ----
 

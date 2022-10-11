@@ -52,7 +52,7 @@ for (i in 1:length(y)) {
   }
 }
 
-rm(i,j,k,v, df, crdatn)
+rm(i,j,k, df, crdatn)
 
 
 # Cleaning ----
@@ -63,16 +63,16 @@ defs <- data.frame(read.csv("D:/Research/DW lending empirical/Data/call_report/c
 defs$Code <- defs$ï..Code
 defs <- defs[defs$Code %in% colnames(crdat1),]
 
-ls <- unique(defs$Item.Name)
 # deleting columns that mean the same thing, just duplicated reports
+ls <- unique(defs$Item.Name)
 for (i in 1:length(ls)) {
   print(paste0('Begin Loop: ',i))
   n <- unique(defs[defs$Item.Name %in% ls[i],]$Code)
   if (length(n) > 1) {
     #List sort
+    k <- vector(length = length(n))
     for (j in 1:length(n)) {
-      k <- vector(length = length(n))
-      k[j] <- sum(is.na(eval(parse(text=paste0('crdat$',n[j])))))
+      k[j] = sum(is.na(eval(parse(text=paste0('crdat$',n[j])))))
     }
     
     list <- data.frame(n,k)
@@ -80,22 +80,23 @@ for (i in 1:length(ls)) {
     
     for (m in 2:length(n)) {
       crdat1[, colnames(crdat1) %in% list[1,1]] <- coalesce(as.numeric(eval(parse(text=paste0("crdat1$",list[1,1])))), as.numeric(eval(parse(text=paste0("crdat1$",list[m,1])))))
-      crdat1 <- crdat1 %>% select(-contains(list[m,1]))
+      #crdat1 <- crdat1 %>% select(-contains(list[,1]))
     }
-    rm(k, list)
+    crdat1 <- crdat1 %>% select(-contains(list[2:length(n),1]))
+    rm(k, list, j, m)
   }
   print(paste0('End Loop: ',i))
 }
-
+crdat1 <- crdat1 %>% select(-contains('text'))
 crdat <- crdat1
-rm(crdat1, i, j, n, k, list)
+rm(crdat1, i, j, n, k, list, ls)
 
 
 inst <- data.frame(read.csv("D:/Research/DW lending empirical/Data/institutions.csv"))
 inst1 <- inst[,c('FED_RSSD','FED','FDICREGN')]
 setnames(inst1, old = c('FED_RSSD'), new = c('IDRSSD'))
 crdat <- left_join(crdat, inst1, by= 'IDRSSD')
-rm(inst, inst1)
+rm(inst, inst1, defs)
 
 
-write.csv(crdat,"D:\\Research\\DW lending empirical\\Data\\call_rep_full.csv")
+write.csv(crdat,"D:\\Research\\DW lending empirical\\Data\\call_rep_full1.csv")
