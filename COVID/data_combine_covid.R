@@ -116,9 +116,5 @@ df1 <- left_join(df, ag)
 df1$pppaccess_cov <- ifelse(df1$freq_cov > 0, 1, 0)
 df1$pppaccess_cov[is.na(df1$dwaccess_cov)] = 0
 df <- df1
-rm(df1,ag)
+rm(df1,ag, effr, int_rate, def)
 
-
-rm(effr, int_rate, def)
-#Save File ----
-write.csv(df,"D:\\Research\\DW lending empirical\\Data\\merged_cov.csv")

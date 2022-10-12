@@ -17,7 +17,7 @@ library("R.utils")
 # Merging data ----
 
 q <- c("0331","0630","0930","1231")
-y <- c("2010","2011","2012","2013","2014","2015","2016","2017","2018","2019","2020")
+y <- c("2010","2011","2012","2013","2014","2015","2016","2017","2018","2019","2020","2021")
 
 list <- dir(path=paste0("D:/Research/DW lending empirical/Data/call_report/FFIEC CDR Call Bulk All Schedules ",q[4],"2009"), pattern=".txt")
 df <- map(paste0("D:/Research/DW lending empirical/Data/call_report/FFIEC CDR Call Bulk All Schedules ",q[4],"2009/",list),

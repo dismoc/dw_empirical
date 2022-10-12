@@ -80,10 +80,13 @@ df$nonppp_loans_growth <- Winsorize((df$nonppp_loans - lag(df$nonppp_loans))/lag
 
 df$loan_reserve_ratio <- df$RCON2122/df$RCON0010
 df$nppp_loan_reserve_ratio <- df$nonppp_loans/df$RCON0010
-df$ppp_loan_reserve_ratio
 
 df <- df %>%
   group_by(IDRSSD, Date) %>%
   slice(n())
 df <- data.frame(df)
 df$IDRSSD <- as.numeric(as.character(df$IDRSSD))
+
+#Save File ----
+write.csv(df,"D:\\Research\\DW lending empirical\\Data\\merged_cov.csv")
+

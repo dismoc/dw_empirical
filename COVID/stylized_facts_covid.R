@@ -197,7 +197,7 @@ ggplot(data.frame(plot1[1:12,c(1,3)]), aes(x=as.factor(FED), y = borrow_share)) 
 # Show the share of loans that are non-ppp and ppp since 2019
 plot1 <- subset(df, as.Date(Date) >= as.Date('2019-01-01'))
 plot1[is.na(plot1$RCONLG27) == TRUE,'RCONLG27'] <- 0
-plot1 <- aggregate(cbind(new_loans,RCONLG27) ~ Date, plot1, sum)
+plot1 <- aggregate(cbind(RCON2122,RCONLG27) ~ Date, plot1, sum)
 plot1 <- plot1 %>% gather('Loan Type', val,-Date)
 plot1$Date <- as.Date(plot1$Date)
 plot1$`Loan Type` <- ifelse(plot1$`Loan Type` == 'RCONLG27', 'PPP Loans', 'Non-PPP Loans')
