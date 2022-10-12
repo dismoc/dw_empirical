@@ -16,6 +16,7 @@ library('fixest')
 library('timeDate')
 library('xtable')
 library('scales')
+library('usmap')
 
 # Purpose is to see reseve / asset to fed lending in each district during covid quarters
 dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
@@ -196,7 +197,7 @@ ggplot(data.frame(plot1[1:12,c(1,3)]), aes(x=as.factor(FED), y = borrow_share)) 
 # Show the share of loans that are non-ppp and ppp since 2019
 plot1 <- subset(df, as.Date(Date) >= as.Date('2019-01-01'))
 plot1[is.na(plot1$RCONLG27) == TRUE,'RCONLG27'] <- 0
-plot1 <- aggregate(cbind(nonppp_loans,RCONLG27) ~ Date, plot1, sum)
+plot1 <- aggregate(cbind(new_loans,RCONLG27) ~ Date, plot1, sum)
 plot1 <- plot1 %>% gather('Loan Type', val,-Date)
 plot1$Date <- as.Date(plot1$Date)
 plot1$`Loan Type` <- ifelse(plot1$`Loan Type` == 'RCONLG27', 'PPP Loans', 'Non-PPP Loans')
@@ -218,24 +219,144 @@ plot1$Amount <- paste0(round(plot1$Amount/1e9,2),' B')
 plot1$Mean <- paste0(round(plot1$Mean/1e6,2),' M')
 print(xtable(plot1), include.rownames=FALSE)
 
-# Plot quantile of PPP loans.
-
 # Stylized Facts - Quantile graph of demand shock to reserves
-plot1 <- data.frame(Percentile = 0:100, `Share of Reserves` = quantile(sf2$demand_so_reserves, seq(0,1,by=.01), na.rm = TRUE))
-ggplot(plot1[2:nrow(plot1),], aes(x=Percentile, y=Share.of.Reserves)) + geom_point() +
-  scale_y_log10() + scale_x_continuous(breaks=seq(0,100,by=5)) +
-  ylab('Demand Share of Reserves') +
-  theme(text = element_text(size = 18))
-
-#What share of banks go to PPPLF and DW?
-length(na.omit(match(unique(pplf$Institution.ABA),subset(dwborrow,Loan.date >= as.Date('2020-04-03') & Loan.date <= as.Date('2020-08-08'))$Borrower.ABA.number)))
+  plot1 <- data.frame(Percentile = 0:100, `Share of Reserves` = quantile(sf2$demand_so_reserves, seq(0,1,by=.01), na.rm = TRUE))
+  ggplot(plot1[2:nrow(plot1),], aes(x=Percentile, y=Share.of.Reserves)) + geom_point() +
+    scale_y_log10() + scale_x_continuous(breaks=seq(0,100,by=5)) +
+    ylab('Demand Share of Reserves') +
+    theme(text = element_text(size = 18))
+  
+# Average loan size by state
+  sbd <- aggregate(cbind(n,InitialApprovalAmount) ~ OriginatingLenderState + DateApproved, subset(pppm, DateApproved <= '2020-08-08'), sum)
+  sbd$avg_loan <- sbd$InitialApprovalAmount/sbd$n
+  plot1 <- aggregate(avg_loan ~ OriginatingLenderState, sbd, mean)
+  plot1 <- data.frame(state=plot1$OriginatingLenderState, values = plot1$avg_loan)
+  plot_usmap(regegions = 'states', data = plot1, values = 'values') + 
+    labs(title = "US States",
+         subtitle = "This is a blank map of the counties of the United States.") + 
+    theme(panel.background = element_rect(color = "black", fill = "lightblue"))
+  
+# Aggregate Data 1: Correlation between dw borrowing (aggregate) and aggregate ppp loans-------
+  # Transformation
+  ppb2<- aggregate(Original.Outstanding.Advance.Amount ~ Date.Of.Advance, pplf, sum)
+  sf <- full_join(ppb, ppb2, by=c('DateApproved' = 'Date.Of.Advance'))
+  sf <- sf[order(sf$DateApproved),]
+  sf[is.na(sf)] <- 0
+  sf$tot_change <- sf$Original.Outstanding.Advance.Amount - sf$InitialApprovalAmount
+  sf$cumu <- cumsum(sf[, 'tot_change'])
+  
+  dwborrow1 <- dwborrow %>% count(Loan.date)
+  dwborrow2 <- aggregate(Loan.amount ~ Loan.date, dwborrow, FUN = sum)
+  dwborrow1 <- subset(full_join(dwborrow2,dwborrow1), as.Date(Loan.date) >= as.Date('2020-01-01'))
+  
+  sf <- full_join(sf,dwborrow1, by=c('DateApproved' = 'Loan.date')) %>% select(-contains("..."))
+  sf <- subset(sf, as.Date(DateApproved) <= as.Date('2020-10-01'))
+  sf <- sf[order(sf$DateApproved),]
+  
+  
+  ind <- which(is.na(sf$n) == TRUE)
+  for (i in 2:length(ind)) {
+    if (ind[i] == ind[i-1]+1) {
+      ind <- ind[-i]
+    }
+    print(length(ind))
+  }
+  
+  sf[ind+1,'InitialApprovalAmount'] <- sf[ind+1,'InitialApprovalAmount'] + sf[ind,'InitialApprovalAmount']
+  sf <- sf[-ind,]
+  ind <- which(is.na(sf$n) == TRUE)
+  ind <- ind[1:length(ind)-1]
+  sf[ind+1,'InitialApprovalAmount'] <- sf[ind+1,'InitialApprovalAmount'] + sf[ind,'InitialApprovalAmount']
+  sf <- sf[-ind,]
+  ind <- which(is.na(sf$n) == TRUE)
+  sf[ind-1,'InitialApprovalAmount'] <- sf[ind-1,'InitialApprovalAmount'] + sf[ind,'InitialApprovalAmount']
+  sf <- sf[-ind,]
+  
+  rm(ind, dwborrow1, dwborrow2)
+  # Creation
+  sf$cumu <- sf$cumu$tot_change
+  sf$cumu_init <- 4075359310000 + sf$cumu
+  sf$InitialApprovalAmount <- ifelse(is.na(sf$InitialApprovalAmount) == TRUE & as.Date(sf$DateApproved) <= as.Date('2020-04-02'), 0, sf$InitialApprovalAmount)
+  sf$InitialApprovalAmount <- ifelse(is.na(sf$InitialApprovalAmount) == TRUE & as.Date(sf$DateApproved) >= as.Date('2020-08-10'), 0, sf$InitialApprovalAmount)
+  
+  sf <- sf[-c(75:80),]; sf <- sf[-c(121:123),];  #uncut
+  
+  sf$ppp_week_avg <- rollapply(sf$InitialApprovalAmount, 5, mean, na.rm=TRUE, fill = NA, partial=3)
+  sf$dw_quant_avg <- rollapply(sf$Loan.amount, 5, mean, na.rm=TRUE, fill = NA, partial=3)
+  sf$cum_quant_avg <- rollapply(sf$cumu, 5, mean, na.rm=TRUE, fill = NA, partial=3)
+  sf$tchange_avg <- rollapply(sf$tot_change, 5, mean, na.rm=TRUE, fill = NA, partial=3)
+  sf$id <- 1
+  sf$signal <- ifelse(as.Date(sf$DateApproved) >= as.Date('2020-03-16') & as.Date(sf$DateApproved) <= as.Date('2020-03-21'), 1, 0)
+  sf$preppp <- ifelse(as.Date(sf$DateApproved) <= as.Date('2020-04-02'), 0, 1)
+  
+  #Uncut
+  
+  
+  # Figures
+  #only for april - august period
+  sf <- sf[sf$InitialApprovalAmount != 0,]
+  # PPP and DW loan correlation not log with cut
+  ggplot(sf) +
+    geom_line(aes(x = DateApproved, y = InitialApprovalAmount/3, colour ='PPP'), size=1.5) +
+    geom_line(aes(x = DateApproved, y = Loan.amount, colour ='DW'), size=1.5) +
+    scale_y_continuous(name = "Daily DW Loans", 
+                       sec.axis = sec_axis(~.*3, name="Daily PPP Loans", labels = label_number(suffix = "B", scale = 1e-9)),
+                       labels = label_number(suffix = "B", scale = 1e-9)) +
+    labs(x="Date") + 
+    theme(legend.position = c(.9, .9), legend.title=element_blank(), text = element_text(18)) +
+    annotate('text', label = paste0('Correlation = ',round(cor(sf$Loan.amount,sf$InitialApprovalAmount,'complete'),2)), 
+             x=max(sf$DateApproved, na.rm=TRUE) - 21, y=10e9)
+  
+  #Now with the log values
+  ggplot(sf) +
+    geom_line(aes(x = DateApproved, y = log(InitialApprovalAmount+1), colour ='PPP'), size=1.5) +
+    geom_line(aes(x = DateApproved, y = log(Loan.amount+1), colour ='DW'), size=1.5) +
+    scale_y_continuous(name = "Log Value") +
+    labs(x="Date") + 
+    theme(legend.position = c(.9, .9), legend.title=element_blank(), text = element_text(18)) +
+    annotate('text', label = paste0('Correlation = ',round(cor(log(sf$Loan.amount+1),log(sf$InitialApprovalAmount+1),'complete'),2)), 
+             x=max(sf$DateApproved, na.rm=TRUE) - 21, y=10)
+  
+  # using moving averages
+  ggplot(sf) +
+    geom_line(aes(x = DateApproved, y = ppp_week_avg/5, colour ='PPP'), size=1.5) +
+    geom_line(aes(x = DateApproved, y = dw_quant_avg, colour ='DW'), size=1.5) +
+    scale_y_continuous(name = "Mov. Avg. DW Loans", 
+                       sec.axis = sec_axis(~.*5, name="Mov. Avg. PPP Loans", labels = unit_format(unit = "B", scale = 1e-9)),
+                       labels = unit_format(unit = "B", scale = 1e-9)) +
+    labs(x="Date") + 
+    theme(legend.position = c(.9, .9), legend.title=element_blank(), text = element_text(18)) +
+    annotate('text', label = paste0('Correlation = ',round(cor(sf$ppp_week_avg,sf$dw_quant_avg,'complete'),2)), 
+             x=max(sf$DateApproved, na.rm=TRUE) - 21, y=5e9)
+  
+  #Now with the log values
+  ggplot(sf) +
+    geom_line(aes(x = DateApproved, y = log(ppp_week_avg), colour ='PPP'), size=1.5) +
+    geom_line(aes(x = DateApproved, y = log(dw_quant_avg), colour ='DW'), size=1.5) +
+    scale_y_continuous(name = "MA Log Value") +
+    labs(x="Date") + 
+    theme(legend.position = c(.9, .9), legend.title=element_blank(), text = element_text(18)) +
+    annotate('text', label = paste0('Correlation = ',round(cor(log(sf$ppp_week_avg+1),log(sf$dw_quant_avg+1),'complete'),2)), 
+             x=max(sf$DateApproved, na.rm=TRUE) - 21, y=22)
+  
+# Info about share of banks that made actions ----
+#Banks that did not lend PPP loans?
+  length(na.omit(setdiff(unique(temp$IDRSSD),unique(subset(matchlb, dateapproved < '2020-08-09')$rssd))))
+  #and they accessed the DW
+    ls <- setdiff(unique(temp$IDRSSD),unique(subset(matchlb, dateapproved < '2020-08-09')$rssd))
+    db <- subset(dwborrow, Loan.date >= '2020-04-03' & Loan.date <= '2020-08-08')
+    length(na.omit(match(unique(df[df$IDRSSD %in% ls,c('IDRSSD','Primary.ABA.Routing.Number')]$Primary.ABA.Routing.Number),db$Borrower.ABA.number)))
+  
 # Banks that lend PPP loans?
-length(unique(subset(temp, RCONLG27>0)$IDRSSD))
-# Banks that borrow from PPPLF
-length(unique(subset(temp, RCONLL59 + RCONLL60>0)$IDRSSD))
-
-plot1 <- aggregate(cbind(PPPLF, DW, PPP) ~ RSSD, sf2, sum)
-length(plot1$RSSD) #sample size
-length(subset(plot1, DW > 0 & PPPLF == 0)$RSSD) # just DW
-length(subset(plot1, DW == 0 & PPPLF > 0)$RSSD) # just PPPLF
-length(subset(plot1, DW > 0 & PPPLF > 0)$RSSD) # both
+  length(na.omit(match(unique(df$IDRSSD),unique(subset(matchlb, dateapproved < '2020-08-09')$rssd))))
+  
+  #Banks that lent out PPP loans and accessed only the DW?
+    ls <-intersect(unique(df$IDRSSD),unique(subset(matchlb, dateapproved < '2020-08-09')$rssd))
+    ls <- unique(df[df$IDRSSD %in% ls,c('IDRSSD','Primary.ABA.Routing.Number')])
+    length(setdiff(intersect(ls$Primary.ABA.Routing.Number,db$Borrower.ABA.number),pplf$Institution.ABA))
+  
+  #Banks that lent out PPP loans and accessed only the PPPLF
+    length(setdiff(pplf$Institution.ABA, intersect(ls$Primary.ABA.Routing.Number,db$Borrower.ABA.number)))
+    
+  #Banks that borrowed from both PPPLF and DW
+    length(intersect(pplf$Institution.ABA, intersect(ls$Primary.ABA.Routing.Number,db$Borrower.ABA.number)))

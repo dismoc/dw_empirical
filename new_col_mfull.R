@@ -24,6 +24,9 @@ library('lubridate')
 df$bigsmall <- ifelse(df$RCON2170 >= 1000000, 'Large', 'Small')
 df$bigsmall2 <- ifelse(df$RCON2170 >= 300000, 'Large', 'Small')
 
+df <- df %>% group_by(IDRSSD) %>% arrange(Date) %>% mutate(t1loan = dplyr::lead(RCON2122))
+df$new_loans <- ifelse(df$t1loan - (df$RCON2122 - pmax(df$RCONA570,(df$RCONA247 - df$RCONA571))) < 0, 0, df$t1loan - (df$RCON2122 - pmax(df$RCONA570,(df$RCONA247 - df$RCONA571))))
+
 # CAMELS - Duchin Sosyura (2014)----
 # Capital Adequacy
   df$ca <- Winsorize(df$RCON8274/df$RCONA223, probs=c(.01,.99),na.rm = TRUE)
@@ -72,6 +75,7 @@ df$ppp_bin <- ifelse(df$RCONLG26 > 0, 1, 0)
 df$ppp_advance <- df$RCONLL59 + df$RCONLL60
 df$ppp_uncovered <- df$RCONLG27 - df$RCONLL59 - df$RCONLL60
 df$nonppp_loans <- ifelse(is.na(df$RCONLG27) == TRUE, df$RCON2122, df$RCON2122 - df$RCONLG27)
+df$new_nppp_loans <- ifelse(is.na(df$RCONLG27) == TRUE, df$new_loans, df$new_loans - df$RCONLG27)
 df$nonppp_loans_growth <- Winsorize((df$nonppp_loans - lag(df$nonppp_loans))/lag(df$nonppp_loans), probs=c(.01,.99), na.rm = TRUE)
 
 df$loan_reserve_ratio <- df$RCON2122/df$RCON0010

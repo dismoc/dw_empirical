@@ -26,7 +26,7 @@ library('haven')
 # Import
 list <- list.files(path="D:/Research/DW lending empirical/Data/ppp_sba/", pattern=".csv")
 dfp <- read_delim(paste0("D:/Research/DW lending empirical/Data/ppp_sba/",list[1]), show_col_types = FALSE) 
-matchlb <- read_dta("D:/Downloads/matched_loans_banks_UPDATED_alldates.dta")
+matchlb <- read_dta("D:/Research/DW lending empirical/Data/matched_loans_banks_UPDATED_alldates.dta")
 
 # Reading in and merging
                   
