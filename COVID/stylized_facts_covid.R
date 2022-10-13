@@ -235,6 +235,12 @@ print(xtable(plot1), include.rownames=FALSE)
     labs(title = "US States",
          subtitle = "This is a blank map of the counties of the United States.") + 
     theme(panel.background = element_rect(color = "black", fill = "lightblue"))
+
+# Showing that shock is conditional on size and # of offices
+  plot1 <- aggregate(cbind(size,log(PPP+1)) ~ RSSD, sf3, mean)
+    ggplot(subset(plot1, V2 >0), aes(x=size,y=V2)) + geom_point()
+  plot(aggregate(log(PPP+1) ~ ra_quint, sf3, mean))
+  
   
 # Aggregate Data 1: Correlation between dw borrowing (aggregate) and aggregate ppp loans-------
   # Transformation
