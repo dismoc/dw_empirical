@@ -26,22 +26,22 @@ for (i in 2:length(list)) {
   sod <- smartbind(sod,sodn)
 }
 
-base <- left_join(aggregate(DEPSUMBR ~ STALPBR + YEAR + RSSDHCR, sod, FUN = sum),
-  aggregate(DEPSUMBR ~ YEAR + RSSDHCR, sod, FUN = sum), by=c('RSSDHCR', 'YEAR'))
+base <- left_join(aggregate(DEPSUMBR ~ STALPBR + YEAR + RSSDID, sod, FUN = sum),
+  aggregate(DEPSUMBR ~ YEAR + RSSDID, sod, FUN = sum), by=c('RSSDID', 'YEAR'))
 base$dep_share <- base$DEPSUMBR.x/base$DEPSUMBR.y
-base <- subset(base, base$RSSDHCR >0)[,c('STALPBR','YEAR','RSSDHCR','dep_share')]
+base <- subset(base, base$RSSDID >0)[,c('STALPBR','YEAR','RSSDID','dep_share')]
 base <- spread(base, STALPBR, dep_share)
-base <- left_join(base,sod[,c('RSSDHCR','CERT','YEAR')],by=c('RSSDHCR','YEAR'))
-base <- base[!duplicated(base[c("RSSDHCR","YEAR")]),]
+base <- left_join(base,sod[,c('RSSDID','CERT','YEAR')],by=c('RSSDID','YEAR'))
+base <- base[!duplicated(base[c("RSSDID","YEAR")]),]
 
 base <- smartbind(base,base); base <- smartbind(base,base)
 
-base <- pdata.frame(base,index = c('RSSDHCR','YEAR'))
+base <- pdata.frame(base,index = c('RSSDID','YEAR'))
 
 q <- c("/03/31","/06/30","/09/30","/12/31")
 base <- data.frame(base, rep(q,nrow(base)/4))
 base$Date <- as.Date(paste0(base$YEAR,base$rep.q..nrow.base..4.))
-base <- pdata.frame(data.frame(base),index = c('RSSDHCR','Date'))
+base <- pdata.frame(data.frame(base),index = c('RSSDID','Date'))
 base <- base[ , -which(names(base) %in% c("rep.q..nrow.base..4."))]
 base <- base[seq(1, nrow(base), 4), ]
 
@@ -51,7 +51,7 @@ for (i in 3:ncol(base)-1){
 }
 
 base$Date <- as.Date(base$Date)
-base$RSSDHCR <- as.numeric(as.character(base$RSSDHCR))
+base$RSSDID <- as.numeric(as.character(base$RSSDID))
 
 
 sci <- data.frame(read_delim("D:/Research/DW lending empirical/Data/SOD/CI/coincident-revised.csv",show_col_types = FALSE))
@@ -67,7 +67,7 @@ join <- data.frame(base[,c(1:2,62:63)],
                    mapply("*", base[intersect(names(base), names(sci))],
                           sci[intersect(names(base), names(sci))]))
 join <- data.frame(join[,1:4], exposure = rowSums(join[5:ncol(join)], na.rm = TRUE))
-join <- join[!is.na(join$RSSDHCR),]
+join <- join[!is.na(join$RSSDID),]
 
 list <- match(base$Date, sci$time)
 pb = txtProgressBar(min = 0, max = length(list), initial = 0) 
@@ -78,7 +78,7 @@ lapply(1:length(list), function(i){
   setTxtProgressBar(pb,i)})
 close(pb)
 
-join <- data.frame(base[,c('YEAR','RSSDHCR','CERT','Date','exposure')])
+join <- data.frame(base[,c('YEAR','RSSDID','CERT','Date','exposure')])
 rm(sod, sodn, sci, base)
 
 

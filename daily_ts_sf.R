@@ -29,6 +29,7 @@ library('fitdistrplus')
 
 # Import
 ppb <- read_csv("D:/Research/DW lending empirical/Data/ppp_daily.csv")
+df <- read_csv("D:/Research/DW lending empirical/Data/merged_cov.csv")
 dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
 pplf <- read_csv("D:/Research/DW lending empirical/Data/ppplf_full.csv")
 pppm <- read_csv("D:/Research/DW lending empirical/Data/ppp_bankmatched.csv")
@@ -83,7 +84,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf2[is.na(sf2$ABA) == TRUE,'ABA'] <- ls[match(sf2[is.na(sf2$ABA) == TRUE,'RSSD'],ls$IDRSSD),'ABA']
   sf2[is.na(sf2$RSSD) == TRUE,'RSSD'] <- ls[match(sf2[is.na(sf2$RSSD) == TRUE,'ABA'],ls$ABA),'IDRSSD']
   
-  keep <- c('Date','size','IDRSSD','reserve_asset_ratio','reserve_loan_ratio','RCON0071','RCON0081','eqcaprat','age','borr_total','FED','exposure','OFFICES', 'aq', 'roe')
+  keep <- c('Date','size','IDRSSD','reserve_asset_ratio','reserve_loan_ratio','RCON0071','RCON0081','eqcaprat','age','borr_total','FED','exposure','OFFICES', 'aq', 'roe','RCONB529','RCON2170')
   temp <- subset(df, as.Date(Date) >= as.Date('2020-03-31'))[,keep]
   temp$Date <- as.Date(temp$Date)
   sf2$Quarter <- as.Date(quarter(sf2$Date, type='date_first')-1)
@@ -92,6 +93,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   setnames(sf2, old=c('Original.Outstanding.Advance.Amount', 'Loan.amount'),
            new = c('PPPLF','DW'))
   sf2$Reserves <- (sf2$RCON0081+sf2$RCON0071)*1000
+  sf2$loan_share_asset <- sf2$RCONB529/sf2$RCON2170
   sf2$dw_so_res <- sf2$DW/sf2$Reserves
   sf2$dwbin_notest <- ifelse(sf2$dw_so_res > .01, 1,0)
   sf2$dwbin_notest <- ifelse(is.na(sf2$dwbin_notest) == TRUE, 0, sf2$dwbin_notest)
@@ -107,7 +109,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf2$ppp_so_reserves <- sf2$PPP/sf2$Reserves
   sf2$ppp_so_reserves <- ifelse(is.na(sf2$ppp_so_reserves) == TRUE, 0, sf2$ppp_so_reserves)
   sf2$delt_so_reserves <- sf2$r_delt/sf2$Reserves
-  temp <- aggregate(cbind(size,reserve_asset_ratio) ~ RSSD, sf2, mean) %>% mutate(size_quint = ntile(size,5), ra_quint = ntile(reserve_asset_ratio,5))
+  temp <- aggregate(cbind(size,reserve_asset_ratio) ~ RSSD, sf2, mean) %>% mutate(size_quint = ntile(size,50), ra_quint = ntile(reserve_asset_ratio,5))
   sf2 <- left_join(sf2, temp[,c('RSSD','size_quint','ra_quint')], by = 'RSSD')
   
   temp <-aggregate(cbind(PPP,DW,PPPLF) ~ RSSD, sf2, sum)
@@ -117,12 +119,21 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf2 <- left_join(sf2,temp[,c('RSSD','PPPLF_i','DW_i','PPP_i')])
   sf2$State <- coalesce(sf2$State, sf2$Borrower.state)
   
+  #Create series on whether bank has accessed the LF within the past month
+  t <- aggregate(PPPLF_ind ~ RSSD + Date, sf2, sum) %>% group_by(RSSD) %>% arrange(RSSD, Date)
+  t <- t %>% group_by(RSSD) %>%
+    complete(Date = full_seq(Date, period = 1), fill = list(PPPLF_ind = 0)) %>%
+    mutate(LF_30 = rollapplyr(PPPLF_ind, width = 30, FUN = sum, partial = TRUE)) %>%
+    drop_na()
+  t$LF_30 <- ifelse(t$LF_30 > 0, 1, 0)
+  sf2 <- left_join(sf2,t[,c('RSSD','Date','LF_30')],by=c('RSSD','Date'))
   # create series on whether bank has used DW 5 years pre-covid
   dwborrow1 <- subset(dwborrow, Loan.date >= '2015-04-03' & Loan.date < '2020-04-03')
   ls <- intersect(unique(sf2$ABA),unique(dwborrow1$Borrower.ABA.number))
   sf2[sf2$ABA %in% ls, 'precovdw'] <- 1
   sf2$precovdw <- ifelse(is.na(sf2$precovdw) == TRUE, 0, 1)
   #Creating the shift share instrument
+    #Why instrument? 
     #share - total PPP loans lent out by state and day, shift - daily change in PPP lending size total
     sbydate <- aggregate(cbind(n,InitialApprovalAmount) ~ OriginatingLenderState + DateApproved, subset(pppm, DateApproved <= '2020-08-08'), sum)
 # Regressions 
@@ -131,28 +142,23 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf3 <- sf3 %>% drop_na(RSSD, Date, State, size_quint)
   stargazer(data.frame(sf3[,c('PPP','PPPLF','PPPLF_i','DW','DW_i','reserve_asset_ratio','OFFICES','eqcaprat','precovdw')])) #summary statistic
   dict1 <- c('dw_bin' = 'DW Prob', 'demand_so_reserves' = 'Demand Shock', 'reserve_asset_ratio' = 'RA Ratio',
-             'size' = 'Log(Asset)', 'log(PPPLF+1)' = 'Log(PPPLF)', 'log(RCON0010)' = 'Log(Reserves)',
+             'size' = 'Size', 'log(PPPLF+1)' = 'Log(PPPLF)', 'log(RCON0010)' = 'Log(Reserves)',
              'eqcaprat' = 'Equity Cap Ratio', 'ppp_so_reserves' = 'Demand Shock',
              'ppp_so_reserves x PPPLF_ind' = 'DS*PPPLF_ind', 'log(borr_total+1)' = 'Log(FF Borrowing)',
              'log(ppp_so_reserves)' = 'Log(Demand Shock)', 'log(PPP)' = 'Log(PPP)',
-             'dwbin_notest' = 'DW Prob')
+             'dwbin_notest' = 'DW Prob', 'log(reserve_asset_ratio)' = 'Log RA Ratio',
+             'LF_30' = 'LF_{30}', 'log(eqcaprat)' = 'Log Equity Cap Ratio')
   
     #Table 1: Binary regression: 1) baseline 2-5) progressively more controls
       t1 <- list()
-      t1[[1]] <- feglm(dwbin_notest ~ ppp_so_reserves*PPPLF_i | State + Date, 
-                  sf3, family = binomial(link = "logit"), panel.id = c('RSSD','Date'))
-      t1[[2]] <- update(t1[[1]], .~. + log2(reserve_asset_ratio) + size + age + OFFICES + log(eqcaprat) + aq + roe + exposure)
-      t1[[3]] <- update(t1[[2]], .~. + precovdw)
-      t1[[4]] <- update(t1[[3]], .~. | . - State + RSSD)
-      etable(t1, dict=dict1,
-             cluster = 'size_quint', tex = F)
+      t1[[1]] <- feglm(dwbin_notest ~ppp_so_reserves + LF_30 | RSSD + Date, 
+                  sf3, family = binomial(link = "probit"), panel.id = c('RSSD','Date'))
+      t1[[2]] <- update(t1[[1]], .~. + log(reserve_asset_ratio) + size)
+      t1[[3]] <- update(t1[[2]], .~. + age + OFFICES + log(eqcaprat) + precovdw)
+      t1[[4]] <- update(t1[[3]], .~. - ppp_so_reserves - LF_30 + ppp_so_reserves*LF_30)
+      etable(t1[1:4], dict=dict1,
+             cluster = 'State', tex = F)
 
-    #Robustness - families
-      t2 <- list()
-      t2[[1]] <- update(t1[[length(t1)]], family = binomial(link = "probit"))
-      t2[[2]] <- update(t1[[length(t1)]], family = gaussian())
-      etable(t1[[length(t1)]],t2, dict=dict1, cluster = 'size_quint', tex=F,
-             drop = c('PPPLF_ind','RA Ratio','Asset','Equity','FF Borrowing'))
     
     #Robustness - clustering
       t3 <- list()
@@ -162,58 +168,45 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       t3[[4]] <- update(t3[[1]], se = 'cluster', cluster = 'FED')
       t3[[5]] <- update(t3[[1]], se = 'cluster', cluster = 'size_quint')
       etable(t3, dict=dict1, tex=F,
-             drop = c('PPPLF_ind','RA Ratio','Asset','Equity','FF Borrowing'))
-      
-      
-    #Robustness - sample sizes
-      t4 <- list()
-      sf3$ppp_so_reserves <- ifelse(sf3$ppp_so_reserves < .01, 0, sf3$ppp_so_reserves)
-      t4[[1]] <- update(t1[[length(t1)]], data = subset(sf3, ppp_so_reserves >= .01))
-      t4[[2]] <- update(t1[[length(t1)]], data = subset(sf3, ppp_so_reserves >= .05))
-      t4[[3]] <- update(t1[[length(t1)]], data = subset(sf3, ppp_so_reserves >= .1))
-      t4[[4]] <- update(t1[[length(t1)]], data = subset(sf3, ppp_so_reserves >= .2))
-      etable(t1[[length(t1)]], t4, dict=dict1, cluster = 'size_quint', tex=F,
-             drop = c('PPPLF_ind','RA Ratio','Asset','Equity','FF Borrowing'))
-      
-    #Robustness - different shock series creation
-      t5 <- list()
-      t5[[1]] <- t1[[length(t1)]]
-      t5[[2]] <- update(t5[[1]], .~. - ppp_so_reserves*PPPLF_i + log(ppp_so_reserves+1)*PPPLF_i)
-      t5[[3]] <- update(t5[[1]], .~. - ppp_so_reserves*PPPLF_i + log(PPP)*PPPLF_i)
-      etable(t5, dict=dict1, cluster = 'size_quint', tex=F,
-             drop = c('PPPLF_ind','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age'))
+             drop = c('eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','Size','exposure'))
       
     #Robustness - Fixed Effects
       t6 <- list()
       t6[[1]] <- update(t1[[length(t1)]], .~. |. - RSSD - Date)
-      t6[[2]] <- update(t1[[length(t1)]], .~. |. - RSSD )
+      t6[[2]] <- update(t1[[length(t1)]], .~. |. - RSSD)
       t6[[3]] <- update(t1[[length(t1)]], .~. |. - RSSD + FED)
       t6[[4]] <- update(t1[[length(t1)]], .~. |. - RSSD + State)
-      etable(t1[[length(t1)]], t6, dict=dict1, se='cluster', tex=F, cluster= 'size_quint',
-             drop = c('PPPLF_ind','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age'))
+      etable(t1[[length(t1)]], t6, dict=dict1, se='cluster', tex=F, cluster= 'State',
+             drop = c('Intercept','Size', 'eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age','OFFICES'))
       
       
-    #Marginal effects - baseline sample
+    #Robustness - different shock series creation
+      t5 <- list()
+      t <- sf3; t$ppp_so_reserves <- ifelse(t$ppp_so_reserves < .01, 0, t$ppp_so_reserves)
+      t5[[1]] <- t1[[length(t1)]]
+      t5[[2]] <- update(t5[[1]], .~. - ppp_so_reserves*LF_30 + log(ppp_so_reserves)*LF_30, data= t)
+      t5[[3]] <- update(t5[[1]], .~. - ppp_so_reserves*LF_30 + log(PPP)*LF_30, data= t)
+      etable(t5, dict=dict1, cluster = 'State', tex=F,
+             drop = c('Size','eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age'))
+      
+    #Robustness - families
+      t2 <- list()
+      t2[[1]] <- update(t1[[length(t1)]], family = binomial(link = "probit"))
+      t2[[2]] <- update(t1[[length(t1)]], family = gaussian())
+      etable(t1[[length(t1)]],t2, dict=dict1, cluster = 'State', tex=F,
+             drop = c('eqcaprat','RA Ratio','Asset','Equity','FF Borrowing'))
+      
+    .#Marginal effects - baseline sample
       me1 <- marginaleffects(t1[[4]]); summary(me1)
       plot_cme(t1[[5]], effect = 'ppp_so_reserves', condition = 'reserve_asset_ratio')
       
-  #Synth DID estimate
 
-      
-# Fitting model parameters
-      # the standard deviation of the random variable
-      r1 <- feols(log(PPP) ~ size, sf3)
-      plotdist(r1$residuals, histo=TRUE)
-      t <- fitdist(exp(r1$residuals), "lnorm") # sd of e = 2.286
-      
-      #the mean and spread of size
-      r2 <-na.omit(unique(sf3[,c('RSSD','size')])$size)
-      plotdist(as.numeric(r2))
-      t <- fitdist(as.numeric(r2), 'gamma')
-      
-      #the mean and spread of ra ratio
-      r3 <-na.omit(unique(sf3[,c('RSSD','reserve_asset_ratio')])$reserve_asset_ratio)
-      plotdist(as.numeric(r3))
-      t <- fitdist(as.numeric(r2), 'weibull'); plot(t); t
-      
+
+# Robustness Tests
+      # Fixed effects vs random effects - result from the hausman test tells us to use the fixed effects model 
+      ran <- pglm(dwbin_notest ~ ppp_so_reserves*PPPLF_i + log(reserve_asset_ratio) + size, index=c("RSSD", "Date"),
+               data=sf3[t1[[4]]$obs_selection$obsRemoved,], model='random', family = binomial())
+      fix <- pglm(dwbin_notest ~ ppp_so_reserves*PPPLF_i + log(reserve_asset_ratio) + size, index=c("RSSD", "Date"),
+                 data=sf3[t1[[4]]$obs_selection$obsRemoved,],model = "random", effect = "twoways", family = binomial())
+      phtest(fix, ran)
       

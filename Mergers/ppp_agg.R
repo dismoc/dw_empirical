@@ -32,7 +32,7 @@ matchlb <- read_dta("D:/Research/DW lending empirical/Data/matched_loans_banks_U
                   
 for (i in 2:length(list)){
   dfpn <- read_delim(paste0("D:/Research/DW lending empirical/Data/ppp_sba/",list[i]), show_col_types = FALSE) 
-  dfp <- bind_rows(dfp,dfpn) %>% select(-contains("..."))
+  dfp <- bind_rows(dfp,dfpn) 
   print(i)
 }
 
