@@ -26,6 +26,7 @@ library('timeperiodsR')
 library('synthdid')
 library('scales')
 library('fitdistrplus')
+library('ivprobit')
 
 # Import
 ppb <- read_csv("D:/Research/DW lending empirical/Data/ppp_daily.csv")
@@ -34,6 +35,7 @@ dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
 pplf <- read_csv("D:/Research/DW lending empirical/Data/ppplf_full.csv")
 pppm <- read_csv("D:/Research/DW lending empirical/Data/ppp_bankmatched.csv")
 att <- read_csv("D:/Research/DW lending empirical/Data/ffiec/Atrributes_merged.csv")[,c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM')]
+binstr <- read_csv("D:/Research/DW lending empirical/Data/binstr.csv")
 
 setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRSSD','STATE'))
 
@@ -127,6 +129,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
     drop_na()
   t$LF_30 <- ifelse(t$LF_30 > 0, 1, 0)
   sf2 <- left_join(sf2,t[,c('RSSD','Date','LF_30')],by=c('RSSD','Date'))
+  sf2 <- left_join(sf2,binstr,by=c('RSSD'='IDRSSD','Date'))
   # create series on whether bank has used DW 5 years pre-covid
   dwborrow1 <- subset(dwborrow, Loan.date >= '2015-04-03' & Loan.date < '2020-04-03')
   ls <- intersect(unique(sf2$ABA),unique(dwborrow1$Borrower.ABA.number))
@@ -192,11 +195,13 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
     #Robustness - families
       t2 <- list()
       t2[[1]] <- update(t1[[length(t1)]], family = binomial(link = "probit"))
-      t2[[2]] <- update(t1[[length(t1)]], family = gaussian())
+      t2[[2]] <- update(t1[[length(t1)]],.~. -ppp_so_reserves|. |ppp_so_reserves ~ log(BInstr),family = gaussian())
       etable(t1[[length(t1)]],t2, dict=dict1, cluster = 'State', tex=F,
              drop = c('eqcaprat','RA Ratio','Asset','Equity','FF Borrowing'))
       
-    .#Marginal effects - baseline sample
+      t <- ivprobit(dwbin_notest ~ log(reserve_asset_ratio) + size + i(Date) + i(RSSD) |ppp_so_reserves| log(BInstr), sf3)
+      
+    #Marginal effects - baseline sample
       me1 <- marginaleffects(t1[[4]]); summary(me1)
       plot_cme(t1[[5]], effect = 'ppp_so_reserves', condition = 'reserve_asset_ratio')
       
@@ -209,4 +214,6 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       fix <- pglm(dwbin_notest ~ ppp_so_reserves*PPPLF_i + log(reserve_asset_ratio) + size, index=c("RSSD", "Date"),
                  data=sf3[t1[[4]]$obs_selection$obsRemoved,],model = "random", effect = "twoways", family = binomial())
       phtest(fix, ran)
+      
+      write.csv(sf3,"D:\\Research\\DW lending empirical\\Data\\reg_data.csv")
       
