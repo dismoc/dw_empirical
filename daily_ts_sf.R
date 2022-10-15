@@ -28,7 +28,7 @@ library('scales')
 library('fitdistrplus')
 library('ivprobit')
 
-# Import
+# Import ----
 ppb <- read_csv("D:/Research/DW lending empirical/Data/ppp_daily.csv")
 df <- read_csv("D:/Research/DW lending empirical/Data/merged_cov.csv")
 dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
@@ -39,12 +39,6 @@ binstr <- read_csv("D:/Research/DW lending empirical/Data/binstr.csv")
 
 setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRSSD','STATE'))
 
-  
-
-
-    
-         
-  
   #Regressions
   dict1 <- c('log(InitialApprovalAmount)' = 'PPP', 'log(quant_week_avg)' = 'Avg Weekly PPP', 'log(Loan.amount)' = 'DW Quant',
              'log(dw_quant_avg)' = 'Avg Weekly DW Quant')
@@ -58,8 +52,6 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
 
 # Aggregate Data 2: correlation between dw borrowing (binary) and uncovered ppp loans (ppp loans - ppplf advance) -------
 # Bank Level Data: -----
-  
-  temp <- subset(df, as.Date(Date) == as.Date('2020-03-31'))
   
   ls <- unique(data.frame(IDRSSD = df$IDRSSD, ABA = df$Primary.ABA.Routing.Number, STATE = df$Financial.Institution.State))
   ls <- unique(smartbind(ls,data.frame(att)))
@@ -94,11 +86,12 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   
   setnames(sf2, old=c('Original.Outstanding.Advance.Amount', 'Loan.amount'),
            new = c('PPPLF','DW'))
-  sf2$Reserves <- (sf2$RCON0081+sf2$RCON0071)*1000
-  sf2$loan_share_asset <- sf2$RCONB529/sf2$RCON2170
-  sf2$dw_so_res <- sf2$DW/sf2$Reserves
-  sf2$dwbin_notest <- ifelse(sf2$dw_so_res > .01, 1,0)
+  sf2$Reserves <- (sf2$RCON0081 + sf2$RCON0071)*1000
+  sf2$lsa <- sf2$RCONB529/sf2$RCON2170
+  sf2$dwsores <- sf2$DW*100/sf2$Reserves
+  sf2$dwbin_notest <- ifelse(sf2$dwsores > .01, 1,0)
   sf2$dwbin_notest <- ifelse(is.na(sf2$dwbin_notest) == TRUE, 0, sf2$dwbin_notest)
+  sf2$dwsores <- ifelse(sf2$dwbin_notest == 1, sf2$dwsores, 0)
   sf2$dw_bin <- ifelse(sf2$DW > 0, 1, 0)
   #sf2$dw_bin <- ifelse(is.na(sf2$dw_bin) == FALSE, sf2$dw_bin, 0)
   
@@ -108,11 +101,12 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf2 <- sf2 %>% group_by(RSSD) %>% mutate(cs_ppp = cumsum(PPP), cs_delt = cumsum(r_delt))
   sf2$month <- month(sf2$Date)
   sf2$cs_ppp <- sf2$cs_ppp/sf2$Reserves
-  sf2$ppp_so_reserves <- sf2$PPP/sf2$Reserves
+  sf2$ppp_so_reserves <- sf2$PPP*100/sf2$Reserves
   sf2$ppp_so_reserves <- ifelse(is.na(sf2$ppp_so_reserves) == TRUE, 0, sf2$ppp_so_reserves)
-  sf2$delt_so_reserves <- sf2$r_delt/sf2$Reserves
-  temp <- aggregate(cbind(size,reserve_asset_ratio) ~ RSSD, sf2, mean) %>% mutate(size_quint = ntile(size,50), ra_quint = ntile(reserve_asset_ratio,5))
-  sf2 <- left_join(sf2, temp[,c('RSSD','size_quint','ra_quint')], by = 'RSSD')
+  sf2$lfsores <- sf2$PPPLF/sf2$Reserves
+  sf2$delt_so_reserves <- sf2$r_delt*100/sf2$Reserves
+  temp <- aggregate(cbind(size,reserve_asset_ratio) ~ RSSD, sf2, mean) %>% mutate(size_quint = ntile(size,50), shock_quint = ntile(reserve_asset_ratio,5))
+  sf2 <- left_join(sf2, temp[,c('RSSD','size_quint','shock_quint')], by = 'RSSD')
   
   temp <-aggregate(cbind(PPP,DW,PPPLF) ~ RSSD, sf2, sum)
   temp$PPPLF_i <- ifelse(temp$PPPLF > 0, 1, 0)
@@ -122,14 +116,18 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf2$State <- coalesce(sf2$State, sf2$Borrower.state)
   
   #Create series on whether bank has accessed the LF within the past month
-  t <- aggregate(PPPLF_ind ~ RSSD + Date, sf2, sum) %>% group_by(RSSD) %>% arrange(RSSD, Date)
+  t <- aggregate(cbind(PPPLF_ind,PPPLF) ~ RSSD + Date, sf2, sum) %>% group_by(RSSD) %>% arrange(RSSD, Date)
   t <- t %>% group_by(RSSD) %>%
     complete(Date = full_seq(Date, period = 1), fill = list(PPPLF_ind = 0)) %>%
-    mutate(LF_30 = rollapplyr(PPPLF_ind, width = 30, FUN = sum, partial = TRUE)) %>%
+    mutate(LF_30i = rollapplyr(PPPLF_ind, width = 30, FUN = sum, partial = TRUE),
+           LF_30 = rollapplyr(PPPLF, width = 30, FUN = sum, partial = TRUE)) %>%
     drop_na()
-  t$LF_30 <- ifelse(t$LF_30 > 0, 1, 0)
+  t$LF_30i <- ifelse(t$LF_30 > 0, 1, 0)
   sf2 <- left_join(sf2,t[,c('RSSD','Date','LF_30')],by=c('RSSD','Date'))
+  sf2$LF_30 <- sf2$LF_30/sf2$Reserves
+  sf2$LF_30 <- ifelse(is.na(sf2$LF_30) == TRUE, 0, sf2$LF_30)
   sf2 <- left_join(sf2,binstr,by=c('RSSD'='IDRSSD','Date'))
+  
   # create series on whether bank has used DW 5 years pre-covid
   dwborrow1 <- subset(dwborrow, Loan.date >= '2015-04-03' & Loan.date < '2020-04-03')
   ls <- intersect(unique(sf2$ABA),unique(dwborrow1$Borrower.ABA.number))
@@ -143,6 +141,10 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf3 <- subset(sf2, Date >= as.Date('2020-04-03') & Date <= as.Date('2020-08-08'))
   sf3 <- sf3[!duplicated(sf3[c("RSSD", "Date")]),]
   sf3 <- sf3 %>% drop_na(RSSD, Date, State, size_quint)
+  sf3 <- sf3[!sf3$Reserves ==0,]
+  sf3 <- sf3[!sf3$delt_so_reserves <= 0,]
+  sf3 <- sf3[rowSums(is.na(sf3)) != ncol(sf3), ]
+  
   stargazer(data.frame(sf3[,c('PPP','PPPLF','PPPLF_i','DW','DW_i','reserve_asset_ratio','OFFICES','eqcaprat','precovdw')])) #summary statistic
   dict1 <- c('dw_bin' = 'DW Prob', 'demand_so_reserves' = 'Demand Shock', 'reserve_asset_ratio' = 'RA Ratio',
              'size' = 'Size', 'log(PPPLF+1)' = 'Log(PPPLF)', 'log(RCON0010)' = 'Log(Reserves)',
@@ -152,26 +154,17 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
              'dwbin_notest' = 'DW Prob', 'log(reserve_asset_ratio)' = 'Log RA Ratio',
              'LF_30' = 'LF_{30}', 'log(eqcaprat)' = 'Log Equity Cap Ratio')
   
-    #Table 1: Binary regression: 1) baseline 2-5) progressively more controls
-      t1 <- list()
-      t1[[1]] <- feglm(dwbin_notest ~ppp_so_reserves + LF_30 | RSSD + Date, 
-                  sf3, family = binomial(link = "probit"), panel.id = c('RSSD','Date'))
-      t1[[2]] <- update(t1[[1]], .~. + log(reserve_asset_ratio) + size)
-      t1[[3]] <- update(t1[[2]], .~. + age + OFFICES + log(eqcaprat) + precovdw)
-      t1[[4]] <- update(t1[[3]], .~. - ppp_so_reserves - LF_30 + ppp_so_reserves*LF_30)
-      etable(t1[1:4], dict=dict1,
-             cluster = 'State', tex = F)
 
-    
-    #Robustness - clustering
-      t3 <- list()
-      t3[[1]] <- update(t1[[length(t1)]], se = 'white')
-      t3[[2]] <- update(t3[[1]], se = 'cluster', cluster = 'RSSD')
-      t3[[3]] <- update(t3[[1]], se = 'cluster', cluster = 'State')
-      t3[[4]] <- update(t3[[1]], se = 'cluster', cluster = 'FED')
-      t3[[5]] <- update(t3[[1]], se = 'cluster', cluster = 'size_quint')
-      etable(t3, dict=dict1, tex=F,
-             drop = c('eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','Size','exposure'))
+        
+    #Table 2: Linear model
+      t1 <- list()
+      t1[[1]] <- feols(dwbin_notest ~ log(ppp_so_reserves) + log(ppp_so_reserves)*log(LF_30+1) + reserve_asset_ratio + size + log(eqcaprat)| RSSD + Date, 
+                       sf3, panel.id = c('RSSD','Date'))
+      t1[[2]] <- update(t1[[1]], log(dwsores+1) ~.)
+      etable(t1, dict=dict1,
+             cluster = 'RSSD', tex = F)
+      
+      t1[[3]] <- update(t1[[2]], .~. - log(ppp_so_reserves) - log(ppp_so_reserves)*log(LF_30+1) |.| log(ppp_so_reserves) ~ BInstr)
       
     #Robustness - Fixed Effects
       t6 <- list()
@@ -179,8 +172,21 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       t6[[2]] <- update(t1[[length(t1)]], .~. |. - RSSD)
       t6[[3]] <- update(t1[[length(t1)]], .~. |. - RSSD + FED)
       t6[[4]] <- update(t1[[length(t1)]], .~. |. - RSSD + State)
-      etable(t1[[length(t1)]], t6, dict=dict1, se='cluster', tex=F, cluster= 'State',
+      t6[[5]] <- update(t1[[length(t1)]], .~. |. - Date + month)
+      etable(t1[[length(t1)]], t6, dict=dict1, se='cluster', tex=F, cluster= 'RSSD',
              drop = c('Intercept','Size', 'eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age','OFFICES'))
+      
+    
+    # clustering
+      t3 <- list()
+      t3[[1]] <- update(t1[[length(t1)]], se = 'white')
+      t3[[2]] <- update(t3[[1]], se = 'cluster', cluster = c('RSSD','Date'))
+      t3[[3]] <- update(t3[[1]], se = 'cluster', cluster = c('RSSD','month'))
+      t3[[4]] <- update(t3[[1]], se = 'cluster', cluster = 'FED')
+      t3[[5]] <- update(t3[[1]], se = 'cluster', cluster = 'State')
+      etable(t3, dict=dict1, tex=F,
+             drop = c('eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','Size','exposure'))
+      
       
       
     #Robustness - different shock series creation
@@ -205,7 +211,16 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       me1 <- marginaleffects(t1[[4]]); summary(me1)
       plot_cme(t1[[5]], effect = 'ppp_so_reserves', condition = 'reserve_asset_ratio')
       
-
+      #Table 1: Binary regression: 1) baseline 2-5) progressively more controls
+      t1 <- list()
+      t1[[1]] <- feglm(dwbin_notest ~ ppp_so_reserves + LF_30 | RSSD + Date, 
+                       sf3, family = binomial(link = "probit"), panel.id = c('RSSD','Date'))
+      t1[[2]] <- update(t1[[1]], .~. + log(reserve_asset_ratio) + size)
+      t1[[3]] <- update(t1[[2]], .~. + age + OFFICES + log(eqcaprat) + precovdw)
+      t1[[4]] <- update(t1[[3]], .~. - ppp_so_reserves - LF_30 + ppp_so_reserves*LF_30)
+      etable(t1[[1]],t1[[2]], dict=dict1,
+             cluster = 'State', tex = F)
+      
 
 # Robustness Tests
       # Fixed effects vs random effects - result from the hausman test tells us to use the fixed effects model 
@@ -216,4 +231,9 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       phtest(fix, ran)
       
       write.csv(sf3,"D:\\Research\\DW lending empirical\\Data\\reg_data.csv")
+      
+      
+      t <- feols(ppp_so_reserves ~ log(ins) + l(ppp_so_reserves,1)+size + log(reserve_asset_ratio)|RSSD + Date, sf3, panel.id = c('RSSD','Date'), se='white')
+      sf4 <- data.frame(sf3[t$obs_selection$obsRemoved,], fit <- t$fitted.values)
+      feglm(dwbin_notest ~ fit +size + log(reserve_asset_ratio)|RSSD + Date, sf4)      
       
