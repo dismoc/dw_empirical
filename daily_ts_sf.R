@@ -63,17 +63,26 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
                    left_join(data.frame(aggregate(Original.Outstanding.Advance.Amount ~ Institution.RSSD + Date.Of.Advance, pplf, sum)), 
                              pplf[,c('Institution.RSSD', 'Date.Of.Advance', 'origin_date')]),
                   by=c('RSSD' = 'Institution.RSSD', 'Date' = 'Date.Of.Advance')) 
+  #changing terms to overnights
   
-  dwborrow1 <- dwborrow
+  dwborrow1 <- subset(dwborrow, Loan.date >= as.Date('2020-03-01') & Type.of.credit == 'Primary Credit')
   dwborrow1$Borrower.ABA.number <- as.numeric(dwborrow1$Borrower.ABA.number)
-
-  sf2 <- full_join(sf2,dwborrow1[,c('Loan.date','Borrower.ABA.number','Loan.amount','Borrower.state')], by=c('ABA' = 'Borrower.ABA.number', 'Date' = 'Loan.date'))
+  dwborrow1 <- dwborrow1[rep(1:nrow(dwborrow1), times=dwborrow1$Term), ]
+  
+  for (i in 2:nrow(dwborrow1)){
+    if (dwborrow1[i,'Term'] > 1 & dwborrow1[i,'Borrower.ABA.number'] == dwborrow1[i-1,'Borrower.ABA.number']) {
+      dwborrow1[i,'Loan.date'] <- dwborrow1[i-1,'Loan.date']+1
+    }
+  }
+  
+  
+  sf2 <- full_join(sf2,dwborrow1[,c('Loan.date','Borrower.ABA.number','Loan.amount','Borrower.state','Term')], by=c('ABA' = 'Borrower.ABA.number', 'Date' = 'Loan.date'))
   
   sf2[is.na(sf2$Original.Outstanding.Advance.Amount),c('Original.Outstanding.Advance.Amount')] <- 0
   sf2[is.na(sf2$Loan.amount),c('Loan.amount')] <- 0
 
   keep <- c('Date','size','IDRSSD','reserve_asset_ratio','reserve_loan_ratio','RCON2170','RCON0071','RCON0081','RCON2200','eqcaprat','age','borr_total','FED','exposure','OFFICES', 'aq', 'roe','RCONB529',
-            'bigsmall')
+            'RCFA7204')
   temp <- subset(df, as.Date(Date) >= as.Date('2020-03-31'))[,keep]
   temp$Date <- as.Date(temp$Date)
   sf2$Quarter <- as.Date(quarter(sf2$Date, type='date_first')-1)
@@ -81,26 +90,33 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   
   setnames(sf2, old=c('InitialApprovalAmount','Original.Outstanding.Advance.Amount', 'Loan.amount'),
            new = c('PPP','PPPLF','DW'))
+
   sf2$Reserves <- (sf2$RCON0081 + sf2$RCON0071)*1000
-  sf2$dwsores <- sf2$DW*100/sf2$Reserves
+  sf2$dwsores <- sf2$DW*100/sf2$RCON2170
+  sf2$ppp_so_reserves <- sf2$PPP*100/sf2$RCON2170
+  sf2$ppp_so_reserves <- ifelse(is.na(sf2$ppp_so_reserves) == TRUE, 0, sf2$ppp_so_reserves)
+  sf2$lfsores <- sf2$PPPLF/sf2$RCON2170
+  #sf2$delt_so_reserves <- sf2$r_delt*100/sf2$RCON2170
+  
   sf2$dwbin_notest <- ifelse(sf2$dwsores > 1, 1,0)
   sf2$dwbin_notest <- ifelse(is.na(sf2$dwbin_notest) == TRUE, 0, sf2$dwbin_notest)
   sf2$dwsores <- ifelse(sf2$dwbin_notest == 1, sf2$dwsores, 0)
   sf2$dw_bin <- ifelse(sf2$DW > 0, 1, 0)
-
+  sf2$levratio <- sf2$RCFA7204
+  sf2$bigsmall <- ifelse(sf2$RCON2170 > 1305000, 1, 0)
+  
+  #Creating the PPP active indicator
+  sf2$pactind <- ifelse(sf2$Date < as.Date('2020-04-03'), 0, ifelse(sf2$Date > as.Date('2020-08-08'), 0, ifelse(sf2$Date > as.Date('2020-04-16') & sf2$Date < as.Date('2020-04-27'), 0,1)))
+  
   sf2$PPPLF_ind <- ifelse(sf2$PPPLF > 0, 1, 0)
   sf2$r_delt <- -sf2$PPPLF + sf2$PPP
   sf2 <- sf2[order(sf2$RSSD,sf2$Date),]
   sf2 <- sf2 %>% group_by(RSSD) %>% mutate(cs_ppp = cumsum(PPP), cs_delt = cumsum(r_delt))
   sf2$month <- month(sf2$Date)
-  sf2$cs_ppp <- sf2$cs_ppp/sf2$Reserves
-  sf2$ppp_so_reserves <- sf2$PPP*100/sf2$Reserves
-  sf2$ppp_so_reserves <- ifelse(is.na(sf2$ppp_so_reserves) == TRUE, 0, sf2$ppp_so_reserves)
-  sf2$lfsores <- sf2$PPPLF/sf2$Reserves
-  sf2$delt_so_reserves <- sf2$r_delt*100/sf2$Reserves
   
   sf2$rsa <- sf2$Reserves/sf2$RCON2170
   sf2$lsa <- sf2$RCONB529/sf2$RCON2170
+  sf2$dsa <- sf2$RCON2200/sf2$RCON2170
   
   temp <- aggregate(cbind(size,reserve_asset_ratio) ~ RSSD, sf2, mean) %>% mutate(size_quint = ntile(size,4), shock_quint = ntile(reserve_asset_ratio,5))
   sf2 <- left_join(sf2, temp[,c('RSSD','size_quint','shock_quint')], by = 'RSSD')
@@ -115,8 +131,8 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   #Create series on whether bank has accessed the LF within the past month
   t <- aggregate(cbind(PPPLF_ind,PPPLF) ~ RSSD + Date, sf2, sum) %>% group_by(RSSD) %>% arrange(RSSD, Date)
   t <- t %>% group_by(RSSD) %>%
-    mutate(LF_30i = rollapplyr(PPPLF_ind, width = 30, FUN = sum, partial = FALSE),
-           LF_30 = rollapplyr(PPPLF, width = 30, FUN = sum, partial = FALSE)) %>%
+    mutate(LF_30i = rollapplyr(PPPLF_ind, width = 30, FUN = sum, partial = TRUE),
+           LF_30 = rollapplyr(PPPLF, width = 30, FUN = sum, partial = TRUE)) %>%
     drop_na()
   t$LF_30i <- ifelse(t$LF_30 > 0, 1, 0)
   sf2 <- left_join(sf2,t[,c('RSSD','Date','LF_30')],by=c('RSSD','Date'))
@@ -151,10 +167,10 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
         
     #Table 2: Linear model
       t1 <- list()
-      t1[[1]] <- feols(dwbin_notest ~ asinh(ppp_so_reserves) +  PPPLF_ind + reserve_asset_ratio + size + log(eqcaprat)| RSSD + Date , 
+      t1[[1]] <- feols(dwbin_notest ~ i(bigsmall,log(ppp_so_reserves+1))  + log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + pactind| RSSD + Date  , 
                        sf3, panel.id = c('RSSD','Date'))
-      t1[[2]] <- update(t1[[1]], asinh(dwsores) ~. + asinh(l(dwsores)),)
-      t1[[3]] <- update(t1[[2]], . ~. - asinh(ppp_so_reserves) |.| asinh(ppp_so_reserves) ~ asinh(l(ppp_so_reserves)) + asinh(l(ppp_so_reserves,2)) + asinh(l(ppp_so_reserves,3)) + asinh(l(ppp_so_reserves,4)))
+      t1[[2]] <- update(t1[[1]], log(dwsores+1) ~.)
+      t1[[3]] <- update(t1[[2]], . ~. - i(bigsmall,log(ppp_so_reserves+1)) |.| i(bigsmall,log(ppp_so_reserves+1)) ~ i(bigsmall,BInstr) )
       etable(t1, dict=dict1,
              cluster = 'RSSD', tex = F)
       
@@ -165,15 +181,15 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       t6[[1]] <- update(t1[[length(t1)]], .~. |. - RSSD - Date)
       t6[[2]] <- update(t1[[length(t1)]], .~. |. - RSSD)
       t6[[3]] <- update(t1[[length(t1)]], .~. |. - RSSD + FED)
-      t6[[4]] <- update(t1[[length(t1)]], .~. |. - RSSD + State)
-      t6[[5]] <- update(t1[[length(t1)]], .~. |. - Date + month)
+      t6[[4]] <- update(t1[[length(t1)]], .~. |. - RSSD + month^State)
+      t6[[5]] <- update(t1[[length(t1)]], .~. |. - Date + Date^State)
       etable(t1[[length(t1)]], t6, dict=dict1, se='cluster', tex=F, cluster= 'RSSD',
              drop = c('Intercept','Size', 'eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age','OFFICES'))
       
     
     # clustering
       t3 <- list()
-      t3[[1]] <- update(t1[[2]], se = 'white')
+      t3[[1]] <- update(t1[[3]], se = 'white')
       t3[[2]] <- update(t3[[1]], se = 'cluster', cluster = c('RSSD','Date'))
       t3[[3]] <- update(t3[[1]], se = 'cluster', cluster = c('RSSD','month'))
       t3[[4]] <- update(t3[[1]], se = 'cluster', cluster = 'FED')
