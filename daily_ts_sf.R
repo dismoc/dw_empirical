@@ -36,6 +36,7 @@ pplf <- read_csv("D:/Research/DW lending empirical/Data/ppplf_full.csv")
 pppm <- read_csv("D:/Research/DW lending empirical/Data/ppp_bankmatched.csv")
 att <- read_csv("D:/Research/DW lending empirical/Data/ffiec/Atrributes_merged.csv")[,c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM')]
 binstr <- read_csv("D:/Research/DW lending empirical/Data/binstr.csv")
+cov <- read_csv("D:/Research/DW lending empirical/Data/cov.csv")
 
 setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRSSD','STATE'))
 
@@ -156,7 +157,11 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   ls <- intersect(unique(sf2$ABA),unique(dwborrow1$Borrower.ABA.number))
   sf2[sf2$ABA %in% ls, 'precovdw'] <- 1
   sf2$precovdw <- ifelse(is.na(sf2$precovdw) == TRUE, 0, 1)
-
+  
+  #merging with the covid data
+  cov$Date <- as.Date(cov$submission_date, '%m/%d/%Y')
+  sf2 <- left_join(sf2, cov[,c('Date','state','new_case')], by=c('Date','State'='state'))
+  sf2$new_case <- ifelse(sf2$new_case < 0, 0, sf2$new_case)
   # Making the regression dataset
   sf3 <- subset(sf2, Date >= as.Date('2020-04-03') & Date <= as.Date('2020-08-08'))
   sf3 <- sf3[!duplicated(sf3[c("RSSD", "Date")]),]
@@ -178,7 +183,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
         
     #Table 2: Linear model
       t1 <- list()
-      t1[[1]] <- feols(log(dwsores+1) ~ log(pppsores+1)  + log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1)| RSSD + Date  , 
+      t1[[1]] <- feols(log(dwsores+1) ~ log(pppsores+1)  + log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1) + log(new_case+1)| RSSD + Date  , 
                        sf3, panel.id = c('RSSD','Date'))
       t1[[2]] <- update(t1[[1]], . ~. - log(pppsores+1) + i(bigsmall,log(pppsores+1)))
       t1[[3]] <- update(t1[[1]], dwbin_notest ~ . )
@@ -193,7 +198,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
     #Robustness - Fixed Effects
       t6 <- list()
       t6[[1]] <- update(t1[[length(t1)]], .~. |. - RSSD - Date)
-      t6[[2]] <- update(t1[[length(t1)]], .~. |. - RSSD - Date + month)
+      t6[[2]] <- update(t1[[length(t1)]], .~. |. - Date + month)
       t6[[3]] <- update(t1[[length(t1)]], .~. |. - RSSD + State)
       t6[[4]] <- update(t1[[length(t1)]], .~. |. - Date + month^State)
       etable(t1[[length(t1)]], t6, dict=dict1, se='cluster', tex=F, cluster= 'RSSD',
