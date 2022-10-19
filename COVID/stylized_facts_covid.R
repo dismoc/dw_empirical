@@ -316,7 +316,7 @@ print(xtable(plot1), include.rownames=FALSE)
     geom_line(aes(x = DateApproved, y = log10(InitialApprovalAmount+1), colour ='PPP'), size=1.5) +
     geom_line(aes(x = DateApproved, y = log10(Loan.amount+1), colour ='DW'), size=1.5) +
     scale_y_continuous(name = "Log Value") +
-    labs(x="Date") + ylim(8,11)+
+    labs(x="Date") + ylim(0,11)+
     theme(legend.position = c(.9, .9), legend.title=element_blank(), text = element_text(18)) +
   annotate('rect',fill='gray',xmin=as.Date('2020-04-03'),xmax = as.Date('2020-04-16'),ymin = -Inf, ymax = Inf, alpha = .35) +
     annotate('rect',fill='gray',xmin=as.Date('2020-04-27'),xmax = as.Date('2020-07-01'),ymin = -Inf, ymax = Inf, alpha = .35) +
@@ -383,22 +383,32 @@ print(xtable(plot1), include.rownames=FALSE)
     
     
 # Scatter plot of DW borrowing and PPP lending ----
-    ls <- subset(df, Date == '2020-03-31')
-    ls <- unique(data.frame(RSSD = ls$IDRSSD, ABA = ls$Primary.ABA.Routing.Number, STATE = ls$Financial.Institution.State, Reserves = (ls$RCON0081+ls$RCON0071)*1000))
-    plot1 <- left_join(pppm,ls, by=c('rssd'='RSSD'))
-    dwborrow1 <- subset(dwborrow, Loan.date >= as.Date('2020-04-03'))
-    dwborrow1$Borrower.ABA.number <- as.numeric(dwborrow1$Borrower.ABA.number)
-    plot1 <- left_join(plot1, dwborrow1, by=c('ABA' = 'Borrower.ABA.number', 'DateApproved'='Loan.date'))
-    plot1$pppsr <- plot1$InitialApprovalAmount/plot1$Reserves
-    plot1$dwsr <- plot1$Loan.amount/plot1$Reserves
-    plot1 <- subset(plot1, pppsr > 0.01 & dwsr > 0.01)
-    ggplot(data.frame(LogDW = log10(plot1$Loan.amount), LogPPP = log10(plot1$InitialApprovalAmount)), aes(x=LogDW,y=LogPPP)) + geom_point() +
-      geom_smooth(method=lm, alpha=.35, color='red')
+    plot1 <- sf3; plot1 <- data.frame(LogDW = log10(plot1$DW), LogPPP = log10(plot1$PPP+1), size = log(plot1$size))
+    plot1 <- plot1[!is.infinite(plot1$LogDW),]
+    plot1 <- plot1 %>% mutate(bin = ntile(LogDW, n=20))
+    plot1 <- plot1 %>% group_by(bin) %>% summarise(LogPPP = mean(LogPPP), LogDW = mean(LogDW), size=mean(size))
+    ggplot(plot1, aes(x=LogDW,y=LogPPP)) + geom_point(shape = 1, aes(size=size)) + scale_shape_manual(values = c(21,19)) + 
+      geom_smooth(method=lm, alpha=0, color='red')+ theme(legend.position = "none") +
+      ylab('Log10 PPP') + xlab('Log10 DW')
+    
+    
     
   # Scattered plot of residual values
-    plot1 <- subset(sf3, ppp_so_reserves > 1 & dwsores>1)
-    p2 <- feols(log(PPP) ~ log(LF_30+1) + reserve_asset_ratio + size + eqcaprat + rsa + lsa + dsa + exposure| RSSD + Date, plot1)
+    plot1 <- subset(sf3, pppsores > 0 & dwsores>0)
+    p2 <- feols(log(pppsores+1) ~ log(LF_30+1) + reserve_asset_ratio + size + eqcaprat + rsa + lsa + dsa + exposure + log(npplsores)| State + Date, plot1)
     p2 <- data.frame(plot1[p2$obs_selection$obsRemoved,],ppr = p2$residuals)
-    p2$dwr <- feols(log(DW) ~ log(LF_30+1) + reserve_asset_ratio + size + eqcaprat + rsa + lsa + dsa + exposure| RSSD + Date, p2)$residuals
-    ggplot(p2, aes(x=dwr, y=ppr)) + geom_count(data=subset(p2, bigsmall==1)) + geom_smooth(method=lm, alpha=.35, se=TRUE, level=.9, color='red')
+    p2$dwr <- feols(log(dwsores+1) ~ log(LF_30+1) + reserve_asset_ratio + size + eqcaprat + rsa + lsa + dsa + exposure + log(npplsores)| State + Date, p2)$residuals
+    p2 <- p2 %>% mutate(bin = ntile(dwr, n=20))
+    p2 <- p2 %>% group_by(bin) %>% summarise(ppr = mean(ppr), dwr = mean(dwr), size=mean(size))
+    ggplot(p2, aes(x=dwr, y=ppr)) + geom_smooth(method=lm, alpha=.25, se=FALSE, level=.95, color='red')+
+      geom_point(shape = 1, aes(size=size)) + theme(legend.position = "none") +
+      ylab('Residualized PPP') + xlab('Residualized DW')
+    
+    
+# correlation between insturment and non-PPP loans
+    plot1 <- aggregate(n ~ RSSD + Quarter, sf3, mean)
+    plot1 <- left_join(plot1, aggregate(nonppp_loans ~ IDRSSD + Date, df, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
+    plot1 <- left_join(plot1, aggregate(RCON2170 ~ IDRSSD + Date, df, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
+    plot1$npshare <- plot1$nonppp_loans/plot1$RCON2170
+    feols(npshare ~ n | Quarter , plot1)
     

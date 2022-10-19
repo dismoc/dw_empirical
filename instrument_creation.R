@@ -48,7 +48,7 @@ b2 <- data.frame(OriginatingLenderState = rep(unique(dfp$OriginatingLenderState)
 temp <- data.frame(dfp)
 temp$DateApproved <- as.Date(temp$DateApproved, '%m/%d/%Y')
 b2 <- left_join(b2,aggregate(InitialApprovalAmount ~ DateApproved + OriginatingLenderState,temp, sum))
-b2$InitialApprovalAmount <- b2$InitialApprovalAmount
+b2$InitialApprovalAmount <- log(b2$InitialApprovalAmount)
 b2 <- reshape(b2, idvar = "DateApproved", timevar = "OriginatingLenderState", direction = "wide")
 colnames(b2) <- sub('InitialApprovalAmount.',"",colnames(b2))
 b2$YEAR <- year(b2$DateApproved)
