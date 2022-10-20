@@ -36,7 +36,6 @@ pplf <- read_csv("D:/Research/DW lending empirical/Data/ppplf_full.csv")
 pppm <- read_csv("D:/Research/DW lending empirical/Data/ppp_bankmatched.csv")
 att <- read_csv("D:/Research/DW lending empirical/Data/ffiec/Atrributes_merged.csv")[,c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM')]
 binstr <- read_csv("D:/Research/DW lending empirical/Data/binstr.csv")
-cov <- read_csv("D:/Research/DW lending empirical/Data/cov.csv")
 
 setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRSSD','STATE'))
 
@@ -59,7 +58,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   totci$TOTCI <- approxfun(1:nrow(totci), totci$TOTCI)(1:nrow(totci))*1000000000
   aggregate(InitialApprovalAmount ~ DateApproved, pppm, sum)
   
-# Bank Level Data: -----
+# Daily Bank Level Data Creation: -----
   ls <- subset(df, Date == '2020-03-31')
   ls <- unique(data.frame(RSSD = ls$IDRSSD, ABA = ls$Primary.ABA.Routing.Number, STATE = ls$Financial.Institution.State))
   sf2 <- data.frame(ls, Date=rep(full_seq(c(as.Date('2020-04-03'),as.Date('2020-08-08')), period=1),5165))
@@ -78,13 +77,16 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   dwborrow1 <- dwborrow1[order(dwborrow1$Borrower.ABA.number,dwborrow1$Loan.date),]
   dwborrow1$Borrower.ABA.number <- as.numeric(dwborrow1$Borrower.ABA.number)
   dwborrow1$term <- as.numeric(dwborrow1$Repayment.date - dwborrow1$Loan.date)
-  dwborrow1 <- dwborrow1[rep(1:nrow(dwborrow1), times=dwborrow1$term), ]
-  dwborrow1 <- dwborrow1[order(dwborrow1$Borrower.ABA.number,dwborrow1$Loan.date),]
-  for (i in 2:nrow(dwborrow1)){
-    if (dwborrow1[i,'term'] > 1 & dwborrow1[i,'Borrower.ABA.number'] == dwborrow1[i-1,'Borrower.ABA.number']) {
-      dwborrow1[i,'Loan.date'] <- dwborrow1[i-1,'Loan.date']+1
+  
+    # Changing everything to 1 term loan
+    dwborrow1 <- dwborrow1[rep(1:nrow(dwborrow1), times=dwborrow1$term), ]
+    dwborrow1 <- dwborrow1[order(dwborrow1$Borrower.ABA.number,dwborrow1$Loan.date),]
+    for (i in 2:nrow(dwborrow1)){
+      if (dwborrow1[i,'term'] > 1 & dwborrow1[i,'Borrower.ABA.number'] == dwborrow1[i-1,'Borrower.ABA.number']) {
+        dwborrow1[i,'Loan.date'] <- dwborrow1[i-1,'Loan.date']+1
+      }
     }
-  }
+    
   dwborrow1 <- left_join(aggregate(Loan.amount ~ Borrower.ABA.number + Loan.date, dwborrow1, sum), dwborrow1[,c('Loan.date','Borrower.ABA.number','Loan.amount','Borrower.state')])
   
   
@@ -151,6 +153,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf2$LF_30 <- sf2$LF_30/sf2$Reserves
   sf2$LF_30 <- ifelse(is.na(sf2$LF_30) == TRUE, 0, sf2$LF_30)
   sf2 <- left_join(sf2,binstr,by=c('RSSD'='IDRSSD','Date'))
+  sf2$covexpo <- ifelse(sf2$covexpo < 0, 0, sf2$covexpo)
   
   # create series on whether bank has used DW 5 years pre-covid
   dwborrow1 <- subset(dwborrow, Loan.date >= '2015-04-03' & Loan.date < '2020-04-03')
@@ -159,15 +162,11 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf2$precovdw <- ifelse(is.na(sf2$precovdw) == TRUE, 0, 1)
   
   #merging with the covid data
-  cov$Date <- as.Date(cov$submission_date, '%m/%d/%Y')
-  sf2 <- left_join(sf2, cov[,c('Date','state','new_case')], by=c('Date','State'='state'))
-  sf2$new_case <- ifelse(sf2$new_case < 0, 0, sf2$new_case)
   # Making the regression dataset
   sf3 <- subset(sf2, Date >= as.Date('2020-04-03') & Date <= as.Date('2020-08-08'))
   sf3 <- sf3[!duplicated(sf3[c("RSSD", "Date")]),]
   sf3 <- sf3 %>% drop_na(RSSD, Date, State, size_quint)
   sf3 <- sf3[!sf3$Reserves ==0,]
-  #sf3 <- sf3[!sf3$delt_so_reserves <= 0,]
   sf3 <- sf3[rowSums(is.na(sf3)) != ncol(sf3), ]
   
   #stargazer(data.frame(sf3[,c('PPP','PPPLF','PPPLF_i','DW','DW_i','reserve_asset_ratio','OFFICES','eqcaprat','precovdw')])) #summary statistic
@@ -180,19 +179,24 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
              'LF_30' = 'LF_{30}', 'log(eqcaprat)' = 'Log Equity Cap Ratio')
   
 
-        
+# Regressions ----        
     #Table 2: Linear model
       t1 <- list()
-      t1[[1]] <- feols(log(dwsores+1) ~ log(pppsores+1)  + log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1) + log(new_case+1)| RSSD + Date  , 
+      t1[[1]] <- feols(log(dwsores+1) ~ log(pppsores+1)  + log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1) + econexpo + log(covexpo+1) + asinh(eci)| RSSD + Date  , 
                        sf3, panel.id = c('RSSD','Date'))
       t1[[2]] <- update(t1[[1]], . ~. - log(pppsores+1) + i(bigsmall,log(pppsores+1)))
       t1[[3]] <- update(t1[[1]], dwbin_notest ~ . )
       t1[[4]] <- update(t1[[3]], . ~ . - log(pppsores+1) + i(bigsmall,log(pppsores+1)))
-      t1[[5]] <- update(t1[[2]], . ~. - i(bigsmall,log(pppsores+1)) |.| i(bigsmall,log(pppsores+1)) ~ i(bigsmall,log(n+1)))
-      t1[[6]] <- update(t1[[1]], . ~. - log(pppsores+1) |.| log(pppsores+1) ~ log(n+1))
+      t1[[5]] <- update(t1[[3]], .~. - log(pppsores+1) |.|  log(pppsores+1) ~ log(n+1))
+      t1[[6]] <- update(t1[[4]], .~. - i(bigsmall,log(pppsores+1)) |.|  i(bigsmall,log(pppsores+1)) ~ i(bigsmall,log(n+1)))
+      t1[[7]] <- update(t1[[2]], . ~. - i(bigsmall,log(pppsores+1)) |.| i(bigsmall,log(pppsores+1)) ~ i(bigsmall,log(n+1)))
+      t1[[8]] <- update(t1[[1]], . ~. - log(pppsores+1) |.| log(pppsores+1) ~ log(n+1) )
       etable(t1, dict=dict1,
              cluster = 'RSSD', tex = F)
       
+      etable(t1[[1]],t1[[8]],t1[[3]],t1[[5]], dict= dict1,
+             drop = c('Intercept','Size', 'eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age','OFFICES','rsa','lsa','dsa','npplsores','econexpo','eci'),
+             tex = T)
       #t1[[3]] <- update(t1[[2]], .~. - log(ppp_so_reserves) - log(ppp_so_reserves)*log(LF_30+1) |.| log(ppp_so_reserves) ~ BInstr)
       
     #Robustness - Fixed Effects
@@ -202,7 +206,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       t6[[3]] <- update(t1[[length(t1)]], .~. |. - RSSD + State)
       t6[[4]] <- update(t1[[length(t1)]], .~. |. - Date + month^State)
       etable(t1[[length(t1)]], t6, dict=dict1, se='cluster', tex=F, cluster= 'RSSD',
-             drop = c('Intercept','Size', 'eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age','OFFICES'))
+             drop = c('Intercept','Size', 'eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age','OFFICES','rsa','lsa','dsa','npplsores','econexpo','eci'))
       
     
     # clustering
@@ -213,7 +217,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       t3[[4]] <- update(t3[[1]], se = 'cluster', cluster = 'FED')
       t3[[5]] <- update(t3[[1]], se = 'cluster', cluster = 'State')
       etable(t3, dict=dict1, tex=F,
-             drop = c('eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','Size','exposure'))
+             drop = c('Intercept','Size', 'eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age','OFFICES','rsa','lsa','dsa','npplsores','econexpo','eci','covexpo'))
       
       
       
