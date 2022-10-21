@@ -104,7 +104,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   setnames(sf2, old=c('InitialApprovalAmount','Original.Outstanding.Advance.Amount', 'Loan.amount'),
            new = c('PPP','PPPLF','DW'))
 
-  sf2$Reserves <- (sf2$RCON0081+ sf2$RCON0071)*1000
+  sf2$Reserves <- (sf2$RCON0081 + sf2$RCON0071)*1000
   sf2$Assets <- sf2$RCON2170*1000
   
   sf2$dwsores <- sf2$DW/sf2$Reserves
@@ -112,14 +112,19 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf2$pppsores <- ifelse(is.na(sf2$pppsores) == TRUE, 0, sf2$pppsores)
   sf2$lfsores <- sf2$PPPLF/sf2$Reserves
   sf2$npplsores <- sf2$nonppp_loans/sf2$Reserves
-  #sf2$delt_so_reserves <- sf2$r_delt*100/sf2$RCON2170
+  
+  sf2$dwsoa <- sf2$DW/sf2$RCON2170
+  sf2$pppsoa <- sf2$PPP/sf2$RCON2170
+  sf2$pppsoa <- ifelse(is.na(sf2$pppsoa) == TRUE, 0, sf2$pppsoa)
+  sf2$lfsoa <- sf2$PPPLF/sf2$RCON2170
   
   sf2$dwbin_notest <- ifelse(sf2$dwsores > 0.01, 1,0)
   sf2$dwbin_notest <- ifelse(is.na(sf2$dwbin_notest) == TRUE, 0, sf2$dwbin_notest)
   sf2$dwsores <- ifelse(sf2$dwbin_notest == 1, sf2$dwsores, 0)
   sf2$dw_bin <- ifelse(sf2$DW > 0, 1, 0)
   sf2$levratio <- sf2$RCFA7204
-  sf2$bigsmall <- ifelse(sf2$RCON2170 > 1284000, 1, 0)
+  sf2$bigsmall <- ifelse(sf2$RCON2170 > 600000, 1, 0)
+  #sf2$bigsmall <- ifelse(sf2$RCON2170 > 10000000, 2, sf2$bigsmall)
   
   #Creating the PPP active indicator
   sf2$PPPLF_ind <- ifelse(sf2$PPPLF > 0, 1, 0)
@@ -166,37 +171,50 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
   sf3 <- subset(sf2, Date >= as.Date('2020-04-03') & Date <= as.Date('2020-08-08'))
   sf3 <- sf3[!duplicated(sf3[c("RSSD", "Date")]),]
   sf3 <- sf3 %>% drop_na(RSSD, Date, State, size_quint)
-  sf3 <- sf3[!sf3$Reserves ==0,]
+  sf3 <- sf3[!sf3$Reserves == 0,]
   sf3 <- sf3[rowSums(is.na(sf3)) != ncol(sf3), ]
   
   #stargazer(data.frame(sf3[,c('PPP','PPPLF','PPPLF_i','DW','DW_i','reserve_asset_ratio','OFFICES','eqcaprat','precovdw')])) #summary statistic
   dict1 <- c('dw_bin' = 'DW Prob', 'demand_so_reserves' = 'Demand Shock', 'reserve_asset_ratio' = 'RA Ratio',
-             'size' = 'Size', 'log(PPPLF+1)' = 'Log(PPPLF)', 'log(RCON0010)' = 'Log(Reserves)',
+             'size' = 'Log Assets', 'log(PPPLF+1)' = 'Log(PPPLF)', 'log(RCON0010)' = 'Log(Reserves)',
              'eqcaprat' = 'Equity Cap Ratio', 'pppsores' = 'Demand Shock',
              'pppsores x PPPLF_ind' = 'DS*PPPLF_ind', 'log(borr_total+1)' = 'Log(FF Borrowing)',
              'log(pppsores)' = 'Log(Demand Shock)', 'log(PPP)' = 'Log(PPP)',
              'dwbin_notest' = 'DW Prob', 'log(reserve_asset_ratio)' = 'Log RA Ratio',
-             'LF_30' = 'LF_{30}', 'log(eqcaprat)' = 'Log Equity Cap Ratio')
+             'LF_30' = 'LF_{30}', 'log(eqcaprat)' = 'Log Equity Cap Ratio', 
+             'log(dwsores+1)' = 'Log DW Borrowing', 'log(LF_30+1)' ='PPPLF Borr 30D',
+             'log(covexpo+1)' = 'COVID Exposure',  'bigsmall' = 'Size', 'log(pppsores+1)' = 'Log PPP Lending',
+             'bigsmall::0:log(pppsores+1)' = 'Demand*Small Banks', 'bigsmall::1:log(pppsores+1)' = 'Demand*Medium Banks',
+             'bigsmall::2:log(pppsores+1)' = 'Demand*Large Banks', 'log(DW_count+1)' = 'Log DW Borrowing Count')
   
 
-# Regressions ----        
+# Regressions ----
     #Table 2: Linear model
       t1 <- list()
-      t1[[1]] <- feols(log(dwsores+1) ~ log(pppsores+1)  + log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1) + econexpo + log(covexpo+1) + asinh(eci)| RSSD + Date  , 
+      t1[[1]] <- feols(log(dwsores+1) ~ log(pppsores+1)  + i(bigsmall,log(LF_30+1)) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1) + econexpo + log(covexpo+1) + asinh(eci)| RSSD + Date  , 
                        sf3, panel.id = c('RSSD','Date'))
-      t1[[2]] <- update(t1[[1]], . ~. - log(pppsores+1) + i(bigsmall,log(pppsores+1)))
-      t1[[3]] <- update(t1[[1]], dwbin_notest ~ . )
-      t1[[4]] <- update(t1[[3]], . ~ . - log(pppsores+1) + i(bigsmall,log(pppsores+1)))
-      t1[[5]] <- update(t1[[3]], .~. - log(pppsores+1) |.|  log(pppsores+1) ~ log(n+1))
-      t1[[6]] <- update(t1[[4]], .~. - i(bigsmall,log(pppsores+1)) |.|  i(bigsmall,log(pppsores+1)) ~ i(bigsmall,log(n+1)))
-      t1[[7]] <- update(t1[[2]], . ~. - i(bigsmall,log(pppsores+1)) |.| i(bigsmall,log(pppsores+1)) ~ i(bigsmall,log(n+1)))
       t1[[8]] <- update(t1[[1]], . ~. - log(pppsores+1) |.| log(pppsores+1) ~ log(n+1) )
+      t1[[3]] <- update(t1[[1]], dwbin_notest ~ . )
+      t1[[5]] <- update(t1[[3]], .~. - log(pppsores+1) |.|  log(pppsores+1) ~ log(n+1))
+      
+      t1[[2]] <- update(t1[[1]], . ~. - log(pppsores+1) + i(bigsmall,log(pppsores+1)))
+      t1[[7]] <- update(t1[[2]], . ~. - i(bigsmall,log(pppsores+1)) |.| i(bigsmall,log(pppsores+1)) ~ i(bigsmall,log(n+1)))
+      t1[[4]] <- update(t1[[3]], . ~ . - log(pppsores+1) + i(bigsmall,log(pppsores+1)))
+      t1[[6]] <- update(t1[[4]], .~. - i(bigsmall,log(pppsores+1)) |.|  i(bigsmall,log(pppsores+1)) ~ i(bigsmall,log(n+1)))
+      
       etable(t1, dict=dict1,
              cluster = 'RSSD', tex = F)
       
-      etable(t1[[1]],t1[[8]],t1[[3]],t1[[5]], dict= dict1,
-             drop = c('Intercept','Size', 'eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age','OFFICES','rsa','lsa','dsa','npplsores','econexpo','eci'),
+      # Non-interacted
+      etable(t1[[1]],t1[[8]],t1[[3]],t1[[5]], dict= dict1, fitstat = ~n + ar2,
+             drop = c('Intercept', 'eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age','OFFICES','rsa','lsa','dsa','npplsores','econexpo','eci'),
              tex = T)
+      
+      #interacted by large/small, 600m cutoff
+      etable(t1[[2]],t1[[7]],t1[[4]],t1[[6]], dict= dict1, fitstat = ~n + ar2,
+             drop = c('Intercept', 'eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age','OFFICES','rsa','lsa','dsa','npplsores','econexpo','eci'),
+             tex = T)
+      
       #t1[[3]] <- update(t1[[2]], .~. - log(ppp_so_reserves) - log(ppp_so_reserves)*log(LF_30+1) |.| log(ppp_so_reserves) ~ BInstr)
       
     #Robustness - Fixed Effects
@@ -221,51 +239,129 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       
       
       
-    #Robustness - different shock series creation
-      t5 <- list()
-      t <- sf3; t$ppp_so_reserves <- ifelse(t$ppp_so_reserves < .01, 0, t$ppp_so_reserves)
-      t5[[1]] <- t1[[length(t1)]]
-      t5[[2]] <- update(t5[[1]], .~. - ppp_so_reserves*LF_30 + log(ppp_so_reserves)*LF_30, data= t)
-      t5[[3]] <- update(t5[[1]], .~. - ppp_so_reserves*LF_30 + log(PPP)*LF_30, data= t)
-      etable(t5, dict=dict1, cluster = 'State', tex=F,
-             drop = c('Size','eqcaprat','RA Ratio','Asset','Equity','FF Borrowing','precovdw','age'))
+# Table 1 - OLS results (Pooled, Large, small) - w/ and without controls for DW borrowing quantity ----
+      ta <- list()
+      ta[[1]] <- feols(log(dwsores+1) ~ log(pppsores+1)| RSSD + Date  , 
+                       sf3, panel.id = c('RSSD','Date'))
+      ta[[2]] <- update(ta[[1]], . ~. + log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1) + asinh(econexpo) + asinh(covexpo) + asinh(eci) )
+      ta[[3]] <- update(ta[[1]], subset = sf3$bigsmall == 1)
+      ta[[4]] <- update(ta[[2]], subset = sf3$bigsmall == 1)
+      ta[[5]] <- update(ta[[1]], subset = sf3$bigsmall == 0)
+      ta[[6]] <- update(ta[[2]], subset = sf3$bigsmall == 0)
+      etable(ta, dict = dict1,
+             title = 'OLS Estimation of Log DW Borrowing',
+             label = 'main_reg',
+             headers = NA,
+             group = list('Controls:'=c('lsa','rsa','dsa','Equity Cap Ratio','Log Assets','Log RA Ratio','econexpo','COVID Exposure','eci','npplsores')),
+             extralines = list('Pooled','Pooled','Large Banks', 'Large Banks','Small Banks','Small Banks'),
+             tex = FALSE)
       
-    #Robustness - families
-      t2 <- list()
-      t2[[1]] <- update(t1[[length(t1)]], family = binomial(link = "probit"))
-      t2[[2]] <- update(t1[[length(t1)]],.~. -ppp_so_reserves|. |ppp_so_reserves ~ log(BInstr),family = gaussian())
-      etable(t1[[length(t1)]],t2, dict=dict1, cluster = 'State', tex=F,
-             drop = c('eqcaprat','RA Ratio','Asset','Equity','FF Borrowing'))
       
-      t <- ivprobit(dwbin_notest ~ log(reserve_asset_ratio) + size + i(Date) + i(RSSD) |ppp_so_reserves| log(BInstr), sf3)
+# Table 2 - OLS results (Pooled, Large, small) - w/ and without controls for DW borrowing probability ----
+      ta2 <- list()
+      ta2[[1]] <- feols(dwbin_notest ~ log(pppsores+1)| RSSD + Date  , 
+                       sf3, panel.id = c('RSSD','Date'))
+      ta2[[2]] <- update(ta2[[1]], . ~. + log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1) + asinh(econexpo) + asinh(covexpo) + asinh(eci) )
+      ta2[[3]] <- update(ta2[[1]], subset = sf3$bigsmall == 1)
+      ta2[[4]] <- update(ta2[[2]], subset = sf3$bigsmall == 1)
+      ta2[[5]] <- update(ta2[[1]], subset = sf3$bigsmall == 0)
+      ta2[[6]] <- update(ta2[[2]], subset = sf3$bigsmall == 0)
+      etable(ta2, dict = dict1,
+             title = 'OLS Estimation of Log DW Borrowing',
+             label = 'main_reg',
+             headers = NA,
+             group = list('Controls:'=c('lsa','rsa','dsa','Equity Cap Ratio','Log Assets','Log RA Ratio','econexpo','COVID Exposure','eci','npplsores')),
+             extralines = list('Pooled','Pooled','Large Banks', 'Large Banks','Small Banks','Small Banks'),
+             tex = FALSE)
       
-    #Marginal effects - baseline sample
-      me1 <- marginaleffects(t1[[4]]); summary(me1)
-      plot_cme(t1[[5]], effect = 'ppp_so_reserves', condition = 'reserve_asset_ratio')
       
-      #Table 1: Binary regression: 1) baseline 2-5) progressively more controls
-      t1 <- list()
-      t1[[1]] <- feglm(dwbin_notest ~ ppp_so_reserves + LF_30 | RSSD + Date, 
-                       sf3, family = binomial(link = "probit"), panel.id = c('RSSD','Date'))
-      t1[[2]] <- update(t1[[1]], .~. + log(reserve_asset_ratio) + size)
-      t1[[3]] <- update(t1[[2]], .~. + age + OFFICES + log(eqcaprat) + precovdw)
-      t1[[4]] <- update(t1[[3]], .~. - ppp_so_reserves - LF_30 + ppp_so_reserves*LF_30)
-      etable(t1[[1]],t1[[2]], dict=dict1,
-             cluster = 'State', tex = F)
       
+# Table 3 - IV Results (Pooled, Large, small) with controls using the daily data ----
+      ta6 <- list()
+      ta6[[1]] <- update(ta[[2]], .~. - log(pppsores+1) | . | log(pppsores+1) ~ log(n+1))
+      ta6[[2]] <- update(ta[[4]], .~. - log(pppsores+1) | . | log(pppsores+1) ~ log(n+1))
+      ta6[[3]] <- update(ta[[6]], .~. - log(pppsores+1) | . | log(pppsores+1) ~ log(n+1))
+      ta6[[4]] <- update(ta2[[2]], .~. - log(pppsores+1) | . | log(pppsores+1) ~ log(n+1))
+      ta6[[5]] <- update(ta2[[4]], .~. - log(pppsores+1) | . | log(pppsores+1) ~ log(n+1))
+      ta6[[6]] <- update(ta2[[6]], .~. - log(pppsores+1) | . | log(pppsores+1) ~ log(n+1))
+      etable(ta6, dict = dict1,
+             title = 'OLS Estimation of Log DW Borrowing',
+             label = 'main_reg',
+             headers = NA,
+             group = list('Controls:'=c('lsa','rsa','dsa','Equity Cap Ratio','Log Assets','Log RA Ratio','econexpo','COVID Exposure','eci','npplsores')),
+             extralines = list('Pooled','Pooled','Large Banks', 'Large Banks','Small Banks','Small Banks'),
+             tex = FALSE)
+      
+      
+# Cross Sectional Data Creation - Aggregating all daily info during covid to a cross section ----
+sf4 <- aggregate(cbind(PPP, PPPLF, DW, eci, econexpo, covexpo, dwbin_notest, PPPLF_i) ~ RSSD, sf3, sum)
+setnames(sf4, old = c('dwbin_notest','PPPLF_i'), new = c('DW_count','LF_count'))
+sf4 <- left_join(sf4, aggregate(cbind(PPPLF_i,DW_i,OFFICES,Reserves, rsa, lsa, dsa, precovdw) ~ RSSD, sf3, mean), by='RSSD')
+temp <- subset(df, Date == as.Date('2019-12-31'))
+temp$levrat <- temp$RCOA8274/temp$RCOAA224
+sf4 <- left_join(sf4, data.frame(temp[,c('IDRSSD','RCON2170','RCON5563','RCON5571','RCON5573','RCON5575','RCON1766','FED','levrat')]), by=c('RSSD' = 'IDRSSD'))
+sf4$sb_cis <- (sf4$RCON5571+sf4$RCON5573+sf4$RCON5575)/sf4$RCON1766
+sf4$bigsmall <- ifelse(sf4$RCON2170 > 600000,1,0)
+sf4$pppsoa <- sf4$PPP/sf4$RCON2170
+sf4$dwsoa <- sf4$DW/sf4$RCON2170
+sf4$lfsoa <- sf4$PPPLF/sf4$RCON2170
+list <- 
+[,c('pppsores','dwsores','lfsores','eci','econexpo','covexpo','rsa','lsa','dsa','OFFICES','sb_cis')] <- lapply(sf4[,c('pppsores','dwsores','lfsores','eci','econexpo','covexpo','rsa','lsa','dsa','OFFICES','sb_cis')], Winsorize, probs=c(.01,.99), na.rm = TRUE)
 
-# Robustness Tests
-      # Fixed effects vs random effects - result from the hausman test tells us to use the fixed effects model 
-      ran <- pglm(dwbin_notest ~ ppp_so_reserves*PPPLF_i + log(reserve_asset_ratio) + size, index=c("RSSD", "Date"),
-               data=sf3[t1[[4]]$obs_selection$obsRemoved,], model='random', family = binomial())
-      fix <- pglm(dwbin_notest ~ ppp_so_reserves*PPPLF_i + log(reserve_asset_ratio) + size, index=c("RSSD", "Date"),
-                 data=sf3[t1[[4]]$obs_selection$obsRemoved,],model = "random", effect = "twoways", family = binomial())
-      phtest(fix, ran)
-      
-      write.csv(sf3,"D:\\Research\\DW lending empirical\\Data\\reg_data.csv")
-      
-      
-      t <- feols(ppp_so_reserves ~ log(ins) + l(ppp_so_reserves,1)+size + log(reserve_asset_ratio)|RSSD + Date, sf3, panel.id = c('RSSD','Date'), se='white')
-      sf4 <- data.frame(sf3[t$obs_selection$obsRemoved,], fit <- t$fitted.values)
-      feglm(dwbin_notest ~ fit +size + log(reserve_asset_ratio)|RSSD + Date, sf4)      
-      
+# Table 4 - OLS results (Pooled, Large, small) for DW borrowing sizes (aggregate) ----
+ta3 <- list()  
+ta3[[1]] <- feols(log(dwsores+1) ~ log(pppsores+1) | FED , sf4)
+ta3[[2]] <- update(ta3[[1]], .~. + log(lfsores+1) + asinh(eci) + asinh(econexpo) + asinh(covexpo) + asinh(OFFICES) + levrat + rsa + lsa + dsa + precovdw )
+ta3[[3]] <- update(ta3[[1]], subset = sf4$bigsmall == 1)
+ta3[[4]] <- update(ta3[[2]], subset = sf4$bigsmall == 1)
+ta3[[5]] <- update(ta3[[1]], subset = sf4$bigsmall == 0)
+ta3[[6]] <- update(ta3[[2]], subset = sf4$bigsmall == 0)
+
+etable(ta3, dict = dict1,
+       title = 'OLS Estimation of Log DW Borrowing',
+       se = 'white',
+       label = 'aggregate_quant_reg',
+       headers = c('Pooled','Pooled','Large Banks', 'Large Banks','Small Banks','Small Banks'),
+       group = list('Controls:'=c('lsa','rsa','dsa','Equity Cap Ratio','Log Assets','Log RA Ratio','econexpo','COVID Exposure','eci','npplsores')),
+       fitstat = ~n + r2,
+       tex = FALSE)
+
+# Table 5 - OLS results (Pooled, Large, small) for DW borrowing quantity (aggregate) ----
+ta4 <- list()  
+ta4[[1]] <- feols(log(DW_count+1) ~ log(pppsores+1) | FED, sf4)
+ta4[[2]] <- update(ta4[[1]], .~. + log(lfsores+1) + asinh(eci) + asinh(econexpo) + asinh(covexpo) + asinh(OFFICES) + levrat + rsa + lsa + dsa + precovdw)
+ta4[[3]] <- update(ta4[[1]], subset = sf4$bigsmall == 1)
+ta4[[4]] <- update(ta4[[2]], subset = sf4$bigsmall == 1)
+ta4[[5]] <- update(ta4[[1]], subset = sf4$bigsmall == 0)
+ta4[[6]] <- update(ta4[[2]], subset = sf4$bigsmall == 0)
+
+etable(ta4, dict = dict1,
+       title = 'OLS Estimation of Log DW Borrowing',
+       se = 'white',
+       label = 'aggregate_quant_reg',
+       headers = c('Pooled','Pooled','Large Banks', 'Large Banks','Small Banks','Small Banks'),
+       group = list('Controls:'=c('lsa','rsa','dsa','Equity Cap Ratio','Log Assets','Log RA Ratio','econexpo','COVID Exposure','eci','npplsores')),
+       fitstat = ~n + r2,
+       tex = FALSE)
+
+# Table 6 - IV Result for DW Borrowing Quantity ----
+ta5 <- list() 
+sf4$instr <- sf4$sb_cis*log(sf4$RCON2170)
+
+ta5[[1]] <- feols(log(dwsoa+1) ~ log(lfsoa+1) + asinh(eci) + asinh(econexpo) + asinh(covexpo) + asinh(OFFICES) + levrat + rsa + lsa + dsa + precovdw | FED| log(pppsoa+1) ~ sb_cis, sf4)
+ta5[[2]] <- update(ta5[[1]], subset = sf4$bigsmall == 1)
+ta5[[3]] <- update(ta5[[1]], subset = sf4$bigsmall == 0)
+ta5[[4]] <- update(ta5[[1]], .~.|.|  i(bigsmall,log(pppsoa+1)) ~ i(bigsmall,sb_cis))
+
+ta5[[4]] <- feols(log(DW_count+1) ~ log(lfsores+1) + asinh(eci) + asinh(econexpo) + asinh(covexpo) + asinh(OFFICES) + levrat + rsa + lsa + dsa + precovdw |  FED|log(pppsores+1) ~ sb_cis, sf4)
+ta5[[5]] <- update(ta5[[4]], subset = sf4$bigsmall == 1)
+ta5[[6]] <- update(ta5[[4]], subset = sf4$bigsmall == 0)
+
+etable(ta5, dict = dict1,
+       title = 'OLS Estimation of Log DW Borrowing',
+       se = 'white',
+       label = 'aggregate_quant_reg',
+       headers = c('Pooled','Large Banks','Small Banks'),
+       group = list('Controls:'=c('lsa','rsa','dsa','Equity Cap Ratio','Log Assets','Log RA Ratio','econexpo','COVID Exposure','eci','npplsores','precovdw','covexpo','OFFICES','levrat')),
+       fitstat = ~ n + f,
+       tex = FALSE)

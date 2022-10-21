@@ -18,13 +18,10 @@ library('xtable')
 library('scales')
 library('usmap')
 
-# Purpose is to see reseve / asset to fed lending in each district during covid quarters
+# Data Import ----
 dwborrow <- read_csv("D:/Research/DW lending empirical/Data/dwborrow.csv")
 conv <- data.frame(Name = unique(dwborrow$Lending.Federal.Reserve.district), FED = as.numeric(str_extract(unique(dwborrow$Lending.Federal.Reserve.district), "[[:digit:]]+")))
-
 dfpost <- subset(df, as.Date(Date) >= as.Date('2020-01-01') & as.Date(Date) <= as.Date('2020-12-01') )
-
-
 
 # Some graphs about size of loans ----
 agg <- left_join(left_join(left_join(left_join(aggregate(RCON0010 ~ Date + FED, cov, FUN = sum), 
@@ -242,10 +239,14 @@ print(xtable(plot1), include.rownames=FALSE)
   plot(aggregate(log(PPP+1) ~ ra_quint, sf3, mean))
   
   
-# Aggregate Data 1: Correlation between dw borrowing (aggregate) and aggregate ppp loans-------
+# Aggregate Data 1: Correlation between DW borrowing (aggregate) and aggregate PPP loans-------
   # Transformation
   ppb2<- aggregate(Original.Outstanding.Advance.Amount ~ origin_date, pplf, sum)
   sf <- full_join(ppb, ppb2, by=c('DateApproved' = 'origin_date'))
+  setnames(sf, 'Original.Outstanding.Advance.Amount','LF_request')
+  ppb2 <- aggregate(Original.Outstanding.Advance.Amount ~ Date.Of.Advance, pplf, sum)
+  sf <- left_join(sf, ppb2, by=c('DateApproved' = 'Date.Of.Advance'))
+  setnames(sf, 'Original.Outstanding.Advance.Amount','LF_received')
   sf <- sf[order(sf$DateApproved),]
   sf[is.na(sf)] <- 0
 
@@ -288,41 +289,54 @@ print(xtable(plot1), include.rownames=FALSE)
   sf$id <- 1
   sf$signal <- ifelse(as.Date(sf$DateApproved) >= as.Date('2020-03-16') & as.Date(sf$DateApproved) <= as.Date('2020-03-21'), 1, 0)
   sf$preppp <- ifelse(as.Date(sf$DateApproved) <= as.Date('2020-04-02'), 0, 1)
-  setnames(sf, old = c('DateApproved','InitialApprovalAmount','Original.Outstanding.Advance.Amount','Loan.amount'),
-           new = c('Date','PPP','PPPLF','DW'))
-  sf <- subset(sf, Date >= '2020-04-03' & Date <= '2020-08-08') 
+  setnames(sf, old = c('DateApproved','InitialApprovalAmount','Loan.amount'),
+           new = c('Date','PPP','DW'))
+  sfc <- subset(sf, Date >= '2020-04-03' & Date <= '2020-07-01') 
   
-  #Uncut
-  
-  
-# Figures ----
-  # only for april - august period
-  # PPP and DW loan correlation not log with cut
-  ggplot(sf) +
-    geom_line(aes(x = Date, y = PPP/3, colour ='PPP'), size=1.5) +
-    geom_line(aes(x = Date, y = DW, colour ='DW'), size=1.5) +
-    #geom_line(aes(x = Date, y = PPPLF, colour ='PPPLF'), size=1.5) +
-    scale_y_continuous(name = "Daily DW Loans", 
+# Time series figure about the PPP shock and the DW borrowing sizes ----
+  # PPP, DW, PPPLF, from 04-07
+  ggplot(sfc) +
+    geom_line(aes(x = Date, y = PPP/3, colour ='PPP Lending'), size=1.5) +
+    #geom_line(aes(x = Date, y = LF_request , colour ='LF Requested'), size=1.5) +
+    #geom_line(aes(x = Date, y = LF_received , colour ='LF Received'), size=1.5) +
+    geom_line(aes(x = Date, y = DW, colour ='DW Borrowing'), size=1.5) +
+    scale_y_continuous(name = "Daily DW Quantity", 
                        sec.axis = sec_axis(~.*3, name="Daily PPP Loans", labels = label_number(suffix = "B", scale = 1e-9)),
                        labels = label_number(suffix = "B", scale = 1e-9)) +
-    labs(x="Date") + 
+    labs(x="Date") + scale_x_date(date_breaks = '2 weeks') + 
     theme(legend.position = c(.9, .9), legend.title=element_blank(), text = element_text(18)) +
     annotate('rect',fill='gray',xmin=as.Date('2020-04-03'),xmax = as.Date('2020-04-16'),ymin = -Inf, ymax = Inf, alpha = .35) +
-    annotate('rect',fill='gray',xmin=as.Date('2020-04-27'),xmax = as.Date('2020-07-01'),ymin = -Inf, ymax = Inf, alpha = .35) +
-    annotate('rect',fill='gray',xmin=as.Date('2020-07-06'),xmax = as.Date('2020-08-08'),ymin = -Inf, ymax = Inf, alpha = .35) 
+    annotate('rect',fill='gray',xmin=as.Date('2020-04-27'),xmax = as.Date('2020-07-01'),ymin = -Inf, ymax = Inf, alpha = .35)
+    #annotate('rect',fill='gray',xmin=as.Date('2020-07-06'),xmax = as.Date('2020-08-08'),ymin = -Inf, ymax = Inf, alpha = .35) 
     #annotate('rect',fill='red',xmin=as.Date('2020-03-16'),xmax = as.Date('2020-03-27'),ymin = -Inf, ymax = Inf, alpha = .2)
+
+  # PPP, DW, PPPLF, from 01-12
+  ggplot(sf) +
+    geom_line(aes(x = Date, y = PPP/3, colour ='PPP Lending'), size=1.5) +
+    #geom_line(aes(x = Date, y = LF_request , colour ='LF Requested'), size=1.5) +
+    #geom_line(aes(x = Date, y = LF_received , colour ='LF Received'), size=1.5) +
+    geom_line(aes(x = Date, y = DW, colour ='DW Borrowing'), size=1.5) +
+    scale_y_continuous(name = "Daily DW Quantity", 
+                       sec.axis = sec_axis(~.*3, name="Daily PPP Loans", labels = label_number(suffix = "B", scale = 1e-9)),
+                       labels = label_number(suffix = "B", scale = 1e-9)) +
+    labs(x="Date", y= 'Log Quantity') + scale_x_date(date_breaks = '1 month') + 
+    theme(legend.position = c(.9, .9), legend.title=element_blank(), text = element_text(18)) +
+    annotate('rect',fill='gray',xmin=as.Date('2020-04-03'),xmax = as.Date('2020-04-16'),ymin = -Inf, ymax = Inf, alpha = .35) +
+    annotate('rect',fill='gray',xmin=as.Date('2020-04-27'),xmax = as.Date('2020-07-01'),ymin = -Inf, ymax = Inf, alpha = .35)+
+   annotate('rect',fill='gray',xmin=as.Date('2020-07-06'),xmax = as.Date('2020-08-08'),ymin = -Inf, ymax = Inf, alpha = .35) +
+   annotate('rect',fill='red',xmin=as.Date('2020-03-16'),xmax = as.Date('2020-03-27'),ymin = -Inf, ymax = Inf, alpha = .35)
   
   #Now with the log values
-  ggplot(sf) +
-    geom_line(aes(x = DateApproved, y = log10(InitialApprovalAmount+1), colour ='PPP'), size=1.5) +
-    geom_line(aes(x = DateApproved, y = log10(Loan.amount+1), colour ='DW'), size=1.5) +
+  ggplot(sfc) +
+    geom_line(aes(x = Date, y = log10(PPP), colour ='PPP'), size=1.5) +
+    geom_line(aes(x = Date, y = log10(PPPLF), colour ='PPPLF'), size=1.5) +
     scale_y_continuous(name = "Log Value") +
     labs(x="Date") + ylim(0,11)+
     theme(legend.position = c(.9, .9), legend.title=element_blank(), text = element_text(18)) +
   annotate('rect',fill='gray',xmin=as.Date('2020-04-03'),xmax = as.Date('2020-04-16'),ymin = -Inf, ymax = Inf, alpha = .35) +
-    annotate('rect',fill='gray',xmin=as.Date('2020-04-27'),xmax = as.Date('2020-07-01'),ymin = -Inf, ymax = Inf, alpha = .35) +
-    annotate('rect',fill='gray',xmin=as.Date('2020-07-06'),xmax = as.Date('2020-08-10'),ymin = -Inf, ymax = Inf, alpha = .35) +
-    annotate('rect',fill='red',xmin=as.Date('2020-03-16'),xmax = as.Date('2020-03-27'),ymin = -Inf, ymax = Inf, alpha = .2)
+    annotate('rect',fill='gray',xmin=as.Date('2020-04-27'),xmax = as.Date('2020-07-01'),ymin = -Inf, ymax = Inf, alpha = .35) 
+    #annotate('rect',fill='gray',xmin=as.Date('2020-07-06'),xmax = as.Date('2020-08-10'),ymin = -Inf, ymax = Inf, alpha = .35) +
+    #annotate('rect',fill='red',xmin=as.Date('2020-03-16'),xmax = as.Date('2020-03-27'),ymin = -Inf, ymax = Inf, alpha = .2)
   
   # using moving averages
   ggplot(sf) +
@@ -384,8 +398,19 @@ print(xtable(plot1), include.rownames=FALSE)
     
     
 # Scatter plot of DW borrowing and PPP lending ----
+    # With the aggregated data
+    plot1 <- subset(sf4, pppsores > 0 & dwsores>0); 
+    plot1 <- data.frame(LogDW = log(plot1$dwsores), LogPPP = log(plot1$pppsores), size = log(plot1$Assets))
+    plot1 <- plot1[!is.infinite(plot1$LogDW),]
+    plot1 <- plot1 %>% mutate(bin = ntile(LogDW, n=20))
+    plot1 <- plot1 %>% group_by(bin) %>% summarise(LogPPP = mean(LogPPP), LogDW = mean(LogDW), size=mean(size))
+    ggplot(plot1, aes(x=LogDW,y=LogPPP)) + geom_point(shape = 1, aes(size=size)) + scale_shape_manual(values = c(21,19)) + 
+      geom_smooth(method=lm, alpha=0, color='red')+ theme(legend.position = "none") +
+      ylab('Log10 PPP') + xlab('Log10 DW')
+    
+    # With the time series data
     plot1 <- subset(sf3, pppsores > 0 & dwsores>0); 
-    plot1 <- data.frame(LogDW = log10(plot1$DW), LogPPP = log10(plot1$PPP+1), size = log(plot1$size))
+    plot1 <- data.frame(LogDW = log(plot1$dwsores), LogPPP = log(plot1$pppsores), size = log(plot1$Assets))
     plot1 <- plot1[!is.infinite(plot1$LogDW),]
     plot1 <- plot1 %>% mutate(bin = ntile(LogDW, n=20))
     plot1 <- plot1 %>% group_by(bin) %>% summarise(LogPPP = mean(LogPPP), LogDW = mean(LogDW), size=mean(size))
@@ -394,9 +419,9 @@ print(xtable(plot1), include.rownames=FALSE)
       ylab('Log10 PPP') + xlab('Log10 DW')
     
     
-    
-  # Scattered plot of residual values
-    plot1 <- subset(sf3, pppsores > 0 & dwsores>0)
+# Scattered plot of residual values
+    #With the time series data
+    plot1 <- subset(sf3, pppsores >= 0 & dwsores>=0)
     p2 <- feols(log(pppsores+1) ~ log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1) + econexpo + log(covexpo+1) + asinh(eci)| RSSD + Date, plot1)
     p2 <- data.frame(plot1[p2$obs_selection$obsRemoved,],ppr = p2$residuals)
     p2$dwr <- feols(log(dwsores+1) ~ log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1) + econexpo + log(covexpo+1) + asinh(eci)| RSSD + Date, p2)$residuals
@@ -407,8 +432,19 @@ print(xtable(plot1), include.rownames=FALSE)
       geom_point(shape = 1, aes(size=size)) + theme(legend.position = "none") +
       ylab('Residualized PPP') + xlab('Residualized DW')
     
+    #With the aggregated data
+    plot1 <- subset(sf4, pppsores > 0 & dwsores>0)
+    p2 <- feols(log(pppsores) ~ log(lfsores+1) + asinh(eci) + asinh(econexpo) + asinh(covexpo) + asinh(OFFICES) + rsa + lsa + dsa + precovdw, plot1)
+    p2 <- data.frame(plot1, ppr = p2$residuals)
+    p2$dwr <- feols(log(dwsores) ~ log(lfsores+1) + asinh(eci) + asinh(econexpo) + asinh(covexpo) + asinh(OFFICES) + rsa + lsa + dsa + precovdw, p2)$residuals
+    p2 <- p2 %>% mutate(bin = ntile(dwr, n=20))
+    p2 <- p2 %>% group_by(bin) %>% summarise(ppr = mean(ppr), dwr = mean(dwr), size=mean(log(Assets)))
+    ggplot(p2, aes(x=dwr, y=ppr)) + geom_smooth(method=lm, alpha=.25, se=F, level=.95, color='red') +
+      #stat_summary_bin(bin = 20) +
+      geom_point(shape = 1, aes(size=size)) + theme(legend.position = "none") +
+      ylab('Residualized PPP') + xlab('Residualized DW')
     
-# correlation between insturment and non-PPP loans
+# correlation between instrument and non-PPP loans
     plot1 <- aggregate(n ~ RSSD + Quarter, sf3, mean)
     plot1 <- left_join(plot1, aggregate(nonppp_loans ~ IDRSSD + Date, df, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
     plot1 <- left_join(plot1, aggregate(RCON2170 ~ IDRSSD + Date, df, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
