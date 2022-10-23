@@ -106,7 +106,43 @@ base$InitialApprovalAmount <- ifelse(is.na(base$InitialApprovalAmount) == TRUE,0
 base <- aggregate(ed ~ RSSDID + Date, base, sum)
 
 nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID', 'Date'))
-# Aggregate instrument - market share * number of loans given in that county ----
+# Instrument 3: Expected responsiveness of bank using leave-one-out Bartik
+  base <- ppf %>% group_by(rssd, cntst,DateApproved) %>% count()
+  base <- left_join(base, subset(df, Date == as.Date('2019-12-31'))[,c('IDRSSD','OFFICES')], by=c('rssd' = 'IDRSSD'))
+  base$OFFICES <- ifelse(is.na(base$OFFICES) == TRUE, 1, base$OFFICES)
+  base$OFFICES <- ifelse(base$OFFICES == 0, 1, base$OFFICES)
+  base <- base %>% group_by(rssd, DateApproved) %>% mutate(count = sum(n)) %>% arrange(rssd, DateApproved)
+  
+  leave_one_out_mean <- function(x) {
+    result <- c()
+    
+    for ( i in seq_along(x) ) {
+      # note minus-i subsetting is used to subset one observation in each iteration
+      # and the na.rm option to handle missing values
+      result[i] <- mean(x[-i], na.rm = TRUE) 
+    }
+    
+    return(result)
+  }
+  base <- base %>% group_by(rssd, DateApproved) %>% mutate(c_instr = leave_one_out_mean(n))
+  base$c_instr <- ifelse(is.nan(base$c_instr) == TRUE, 0, base$c_instr)
+  base$c_instr <- base$c_instr/base$OFFICES
+  substrRight <- function(x, n){
+    substr(x, nchar(x)-n+1, nchar(x))
+  }
+  base$STALPBR <- substrRight(base$cntst, 2)
+  base <- aggregate(c_instr ~ rssd + DateApproved + STALPBR, base, mean)
+  
+  temp <- aggregate(DEPSUMBR ~ STALPBR + RSSDID, sod, FUN = sum) %>% group_by(RSSDID)
+  temp <- temp %>% group_by(RSSDID) %>% mutate(totdep = sum(DEPSUMBR))
+  temp$depshare <- temp$DEPSUMBR/temp$totdep
+  temp <- left_join(temp, base, by=c('RSSDID' = 'rssd', 'STALPBR'))
+  temp$c_instr <- temp$c_instr*temp$depshare
+  temp <- aggregate(c_instr ~ RSSDID + DateApproved, temp, sum)
+  
+  nf1 <- left_join(nf1, temp, by=c('IDRSSD' = 'RSSDID','Date' = 'DateApproved'))
+  nf1$c_instr <- ifelse(is.na(nf1$c_instr) == TRUE, 0, nf1$c_instr)
+  # Aggregate instrument - market share * number of loans given in that county ----
 temp <- ppf %>% group_by(cntst) %>% count()
 sodn <- sod; sodn$cntst <- toupper(paste0(sod$CNTYNAMB,", ",sod$STALPBR))
 base <- aggregate(DEPSUMBR ~ cntst + RSSDID, sodn, FUN = sum) %>% group_by(RSSDID)
