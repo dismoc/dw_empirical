@@ -315,14 +315,16 @@ print(xtable(plot1), include.rownames=FALSE)
                        sec.axis = sec_axis(~.*8, name="Daily PPP Loans", labels = label_number(suffix = "B", scale = 1e-9)),
                        labels = label_number(suffix = "B", scale = 1e-9)) +
     labs(x="Date") + scale_x_date(date_breaks = '2 weeks') + 
-    theme(legend.position = c(.9, .9), legend.title=element_blank(), text = element_text(18)) +
+    theme(legend.position = c(.85, .85), legend.title=element_blank(), text = element_text(24)) +
     geom_vline(xintercept = as.Date('2020-04-03'), linetype='dashed', size = 1.5)+
     geom_vline(xintercept = as.Date('2020-04-27'), linetype='dashed', size = 1.5)+
+    geom_vline(xintercept = as.Date('2020-04-16'), linetype='dashed', size = 1, color ='red')+
     annotate('rect',fill='gray',xmin=as.Date('2020-04-03'),xmax = as.Date('2020-04-16'),ymin = -Inf, ymax = Inf, alpha = .5) +
     annotate('rect',fill='gray',xmin=as.Date('2020-04-27'),xmax = as.Date('2020-05-15'),ymin = -Inf, ymax = Inf, alpha = .4) +
     annotate("text", x=as.Date('2020-04-02'), y=1e9, label="PPP Phase 1", angle=90) +
-    annotate("text", x=as.Date('2020-04-26'), y=1e9, label="PPP Phase 2", angle=90)
-
+    annotate("text", x=as.Date('2020-04-26'), y=1e9, label="PPP Phase 2", angle=90) +
+    annotate("text", x=as.Date('2020-04-17'), y=6e9, label="First PPPLF Disbursed", angle=270)
+  
   # PPP, DW, PPPLF, from 01-12
   ggplot(sf) +
     geom_line(aes(x = Date, y = PPP/3, colour ='PPP Lending'), size=1.5) +
