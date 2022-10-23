@@ -434,7 +434,7 @@ print(xtable(plot1), include.rownames=FALSE)
       annotate("text", x=13, y=11, label=paste0('Slope = ',round(preg$coefficients[2],2)), angle=28)
     
     
-# Scattered plot of residual values
+# Scattered plot of residual values ----
     #With the time series data
     plot1 <- subset(sf3, pppsores >= 0 & dwsores>=0)
     p2 <- feols(log(PPP+1) ~ log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1)  + log(covexpo+1) + asinh(eci)| RSSD + Date, plot1)
@@ -461,9 +461,30 @@ print(xtable(plot1), include.rownames=FALSE)
       ylab('Residualized PPP') + xlab('Residualized DW')
     
 # correlation between instrument and non-PPP loans
-    plot1 <- aggregate(n ~ RSSD + Quarter, sf3, mean)
+    plot1 <- aggregate(ed ~ RSSD + Quarter, sf3, mean)
     plot1 <- left_join(plot1, aggregate(nonppp_loans ~ IDRSSD + Date, df, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
     plot1 <- left_join(plot1, aggregate(RCON2170 ~ IDRSSD + Date, df, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
     plot1$npshare <- plot1$nonppp_loans/plot1$RCON2170
-    feols(npshare ~ n | Quarter , plot1)
+    feols(npshare ~ ed , plot1)
+    
+# Bins of bank shock to reserves and the share of banks that borrow from DW in that bin ----
+    plot1 <- subset(sf3, PPP > 0)
+    plot1 <- plot1[,c('pppsores','dwbin_notest','size')]
+    plot1 <- plot1 %>% arrange(pppsores) %>% mutate(bin = ntile(pppsores, n=10), bin2 = ntile(size, n=10))
+    temp <- plot1 %>% group_by(bin2) %>% count()
+    plot1 <- left_join(plot1, temp)    
+    plot1 <- left_join(aggregate(dwbin_notest ~ bin2, plot1, sum), temp)    
+    plot1$dwshare <- plot1$dwbin_notest*100/plot1$n
+    ggplot(plot1, aes(x=as.factor(bin2), y=dwshare)) + geom_col() + 
+      xlab('Bank Size Binned') + ylab('Share of Banks accesing DW') +
+      scale_y_continuous(labels = label_number(suffix = "%"))
+      #scale_x_binned()
+    
+    plot1 <- subset(sf4, PPP > 0)
+    plot1 <- plot1[,c('pppsores','RCON2170')]
+    plot1 <- plot1 %>% arrange(pppsores) %>% mutate(bin = ntile(RCON2170, n=10))
+    plot1 <- aggregate(pppsores ~ bin, plot1, mean)
+    ggplot(plot1, aes(x=as.factor(bin), y=pppsores)) + geom_col() + 
+      xlab('Bank Size Binned') + ylab('Share of Reserves Lent through program')
+    #scale_x_binned()
     

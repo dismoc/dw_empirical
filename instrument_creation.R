@@ -67,7 +67,7 @@ nf2 <- subset(nf2, year(Date) == YEAR)
 nf <- nf[(paste0(nf$IDRSSD,nf$Date) %in% paste0(nf2$IDRSSD,nf2$Date)),]
 
 nf1 <- data.frame(nf[1:2] ,mapply("*", nf[intersect(names(nf), names(nf2[,3:(ncol(nf2)-1)]))],
-        nf2[intersect(names(nf2), names(nf[,3:(ncol(nf)-1)]))]))
+                                  nf2[intersect(names(nf2), names(nf[,3:(ncol(nf)-1)]))]))
 nf1$BInstr <- rowSums(nf1[,3:ncol(nf1)], na.rm=TRUE)
 nf1 <- nf1[,c('IDRSSD','Date','BInstr')]
 nf1 <- left_join(nf1, unique(sod[,c('RSSDID','CERT')]), by=c('IDRSSD' = 'RSSDID'))
@@ -106,6 +106,17 @@ base$InitialApprovalAmount <- ifelse(is.na(base$InitialApprovalAmount) == TRUE,0
 base <- aggregate(ed ~ RSSDID + Date, base, sum)
 
 nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID', 'Date'))
+# Aggregate instrument - market share * number of loans given in that county ----
+temp <- ppf %>% group_by(cntst) %>% count()
+sodn <- sod; sodn$cntst <- toupper(paste0(sod$CNTYNAMB,", ",sod$STALPBR))
+base <- aggregate(DEPSUMBR ~ cntst + RSSDID, sodn, FUN = sum) %>% group_by(RSSDID)
+base <- base %>% group_by(cntst) %>% mutate(totdep = sum(DEPSUMBR))
+base$depshare <- base$DEPSUMBR/base$totdep
+base <- left_join(base, temp)
+base$epppn <- base$depshare*base$n
+base <- aggregate(epppn ~ RSSDID, base, sum)
+nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID'))
+
 # COVID Exposure ----
 temp <- data.table(citmatch); 
 temp <-temp[,list(wdens = weighted.mean(density,population)),by=combined_key]
@@ -188,4 +199,3 @@ base <- base[,c('RSSDID','Date','econexpo')]
 base <- base %>% group_by(RSSDID) %>% complete(Date = seq.Date(as.Date('2020-03-01'), as.Date('2020-10-01'), by='day')) %>% fill(econexpo)
 nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID','Date'))
 rm(base, sc)
-
