@@ -419,35 +419,36 @@ print(xtable(plot1), include.rownames=FALSE)
     plot1 <- plot1[!is.infinite(plot1$LogDW),]
     plot1 <- plot1 %>% mutate(bin = ntile(LogDW, n=20))
     plot1 <- plot1 %>% group_by(bin) %>% summarise(LogPPP = mean(LogPPP), LogDW = mean(LogDW), size=mean(size))
-    ggplot(plot1, aes(x=LogDW,y=LogPPP)) + geom_point(shape = 1, aes(size=size)) + scale_shape_manual(values = c(21,19)) + 
+    ggplot(plot1, aes(x=LogPPP,y=LogDW)) + geom_point(shape = 1, aes(size=size)) + scale_shape_manual(values = c(21,19)) + 
       geom_smooth(method=lm, alpha=0, color='red')+ theme(legend.position = "none") +
       ylab('PPP') + xlab('DW')
     
     # With the time series data
     plot1 <- subset(sf3, pppsores > 0 & dwsores>0); 
-    plot1 <- data.frame(LogDW = log(plot1$DW), LogPPP = log(plot1$PPP), size = log(plot1$Assets))
+    plot1 <- data.frame(LogDW = log(plot1$dwsores), LogPPP = log(plot1$pppsores), size = log(plot1$Assets))
     plot1 <- plot1[!is.infinite(plot1$LogDW),]
-    plot1 <- plot1 %>% mutate(bin = ntile(LogDW, n=40))
+    plot1 <- plot1 %>% mutate(bin = ntile(LogDW, n=20))
     plot1 <- plot1 %>% group_by(bin) %>% summarise(LogPPP = mean(LogPPP), LogDW = mean(LogDW), size=mean(size))
     preg <- feols(LogPPP ~ LogDW, plot1); preg
-    ggplot(plot1, aes(x=LogDW,y=LogPPP)) + geom_point(shape = 1, aes(size=size)) + 
+    ggplot(plot1, aes(x=LogPPP,y=LogDW)) + geom_point(shape = 1, aes(size=size)) + 
       geom_smooth(method=lm, alpha=0, color='red')+ theme(legend.position = "none") +
-      ylab('Log PPP') + xlab('Log DW') +
-      annotate("text", x=13, y=11, label=paste0('Slope = ',round(preg$coefficients[2],2)), angle=28)
+      ylab('Log PPP') + xlab('Log DW') 
+      
+    #annotate("text", x=13, y=11, label=paste0('Slope = ',round(preg$coefficients[2],2)), angle=28)
     
     
 # Scattered plot of residual values ----
     #With the time series data
     plot1 <- subset(sf3, pppsores >= 0 & dwsores>=0)
-    p2 <- feols(log(PPP+1) ~ log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1)  + log(covexpo+1) + asinh(eci)| RSSD + Date, plot1)
+    p2 <- feols(pppsores ~ LF_30 + precovdw + log(OFFICES) + rsa + eqcaprat + eci +  ci_com + scisoa + cdep + cisoa + liqass + levrat + size +log(dwage) + covexpo| FED + Date, plot1)
     p2 <- data.frame(plot1[p2$obs_selection$obsRemoved,],ppr = p2$residuals)
-    p2$dwr <- feols(log(DW+1) ~ log(LF_30+1) + log(reserve_asset_ratio) + size + eqcaprat + rsa + lsa + dsa + log(npplsores+1)  + log(covexpo+1) + asinh(eci)| RSSD + Date, p2)$residuals
+    p2$dwr <- feols(dwsores ~ LF_30 + precovdw + log(OFFICES) + rsa + eqcaprat + eci +  ci_com + scisoa + cdep + cisoa + liqass + levrat + size +log(dwage) + covexpo| FED + Date, p2)$residuals
     treg <- feols(dwr ~ ppr , p2);treg
-    #p2 <- p2 %>% mutate(bin = ntile(dwr, n=20))
-    #p2 <- p2 %>% group_by(bin) %>% summarise(ppr = weighted.mean(ppr, size), dwr = weighted.mean(dwr, size), size=weighted.mean(size, size))
-    ggplot(p2, aes(x=dwr, y=ppr)) + geom_smooth(method=lm, alpha=.25, se=F, level=.95, color='red') +
-      stat_summary_bin(bins = 20, geom = 'point') +
-      #geom_point(shape = 1, aes(size=size)) + theme(legend.position = "none") +
+    p2 <- p2 %>% mutate(bin = ntile(ppr, n=20))
+    p2 <- p2 %>% group_by(bin) %>% summarise(ppr = weighted.mean(ppr, size), dwr = weighted.mean(dwr, size), size=weighted.mean(size, size))
+    ggplot(p2, aes(x=ppr, y=dwr)) + geom_smooth(method=lm, alpha=.25, se=F, level=.95, color='red') +
+      #stat_summary_bin(bins = 20, geom = 'point') +
+      geom_point(shape = 1, aes(size=size)) + theme(legend.position = "none") +
       ylab('Residualized PPP') + xlab('Residualized DW')
     
     #With the aggregated data
