@@ -225,7 +225,7 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       ta <- list()
       sft <- subset(sf3, dwsores > 0 & pppsores > 0)
       ta[[1]] <- feols(dwsores ~ pppsores|FED + Date, 
-                       sft, 
+                       sf3, 
                        #subset = sf3$PPP>0 & sf3$DW > 0
                        panel.id = c('RSSD','Date'))
       ta[[2]] <- update(ta[[1]], . ~ .
@@ -291,19 +291,19 @@ setnames(att,old=c('ID_ABA_PRIM','#ID_RSSD','STATE_ABBR_NM'), new =c('ABA','IDRS
       
 # Table 3 - IV Results (Pooled, Large, small) with controls using the daily data ----
       ta6 <- list()
-      ta6[[1]] <- update(ta[[2]], .~. - pppsores | . | pppsores ~ asinh(c_instr))
+      ta6[[1]] <- update(ta[[2]], .~. - pppsores | . | pppsores ~ asinh(c_instr) )
       ta6[[2]] <- update(ta6[[1]], subset = sf3$bigsmall == 1)
       ta6[[3]] <- update(ta6[[1]], subset = sf3$bigsmall == 0)
-      ta6[[4]] <- update(ta2[[2]], .~. - pppsores | . | pppsores ~ asinh(c_instr))
+      ta6[[4]] <- update(ta2[[2]], .~. - pppsores | . | pppsores ~  asinh(c_instr) )
       ta6[[5]] <- update(ta6[[4]], subset = sf3$bigsmall == 1)
       ta6[[6]] <- update(ta6[[4]], subset = sf3$bigsmall == 0)
       etable(ta6, dict = dict1,
              title = 'OLS Estimation of Log DW Borrowing',
              label = 'main_reg',
-             headers = c('Pooled', 'Large Banks','Small Banks'),
+            # headers = c('Pooled', 'Large Banks','Small Banks'),
              fitstat = ~ n + ivf + wh + sargan,
              #group = list('Controls:'=c('lsa','rsa','dsa','Equity Cap Ratio','Log Assets','Log RA Ratio','econexpo','COVID Exposure','eci','npplsores')),
-             tex = T)
+             tex = F)
       
 # Robustness ----
       # Table 1 Robustness - Discount Window borrowing quantity conditional on there being an instance of DW borrowing.
