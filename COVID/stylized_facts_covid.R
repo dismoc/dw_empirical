@@ -471,7 +471,7 @@ print(xtable(plot1), include.rownames=FALSE)
     feols(npshare ~ ed , plot1)
     
 # Bins of bank shock to reserves and the share of banks that borrow from DW in that bin ----
-    plot1 <- subset(sf3, PPP > 0)
+    plot1 <- subset(sf3, pppsores > 0.01)
     plot1 <- plot1[,c('pppsores','dwbin_notest','size')]
     plot1 <- plot1 %>% arrange(pppsores) %>% mutate(bin = ntile(pppsores, n=10), bin2 = ntile(size, n=10))
     temp <- plot1 %>% group_by(bin2) %>% count()
