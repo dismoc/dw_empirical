@@ -432,14 +432,14 @@ print(xtable(plot1), include.rownames=FALSE)
     preg <- feols(LogPPP ~ LogDW, plot1); preg
     ggplot(plot1, aes(x=LogPPP,y=LogDW)) + geom_point(shape = 1, aes(size=size)) + 
       geom_smooth(method=lm, alpha=0, color='red')+ theme(legend.position = "none") +
-      ylab('Log PPP') + xlab('Log DW') 
+      ylab('DW/Reserves') + xlab('PPP/Reserves') 
       
     #annotate("text", x=13, y=11, label=paste0('Slope = ',round(preg$coefficients[2],2)), angle=28)
     
     
 # Scattered plot of residual values ----
     #With the time series data
-    plot1 <- subset(sf3, pppsores >= 0 & dwsores>=0)
+    plot1 <- subset(sf3, pppsores > 0 & dwsores > 0)
     p2 <- feols(pppsores ~ LF_30 + precovdw + log(OFFICES) + rsa + eqcaprat + eci +  ci_com + scisoa + cdep + cisoa + liqass + levrat + size +log(dwage) + covexpo| FED + Date, plot1)
     p2 <- data.frame(plot1[p2$obs_selection$obsRemoved,],ppr = p2$residuals)
     p2$dwr <- feols(dwsores ~ LF_30 + precovdw + log(OFFICES) + rsa + eqcaprat + eci +  ci_com + scisoa + cdep + cisoa + liqass + levrat + size +log(dwage) + covexpo| FED + Date, p2)$residuals
@@ -449,26 +449,26 @@ print(xtable(plot1), include.rownames=FALSE)
     ggplot(p2, aes(x=ppr, y=dwr)) + geom_smooth(method=lm, alpha=.25, se=F, level=.95, color='red') +
       #stat_summary_bin(bins = 20, geom = 'point') +
       geom_point(shape = 1, aes(size=size)) + theme(legend.position = "none") +
-      ylab('Residualized PPP') + xlab('Residualized DW')
+      xlab('Residualized PPP/Reserves') + ylab('Residualized DW/Reserves')
     
     #With the aggregated data
-    plot1 <- subset(sf4, pppsores > 0 & dwsores>0)
-    p2 <- feols(log(pppsores) ~ log(lfsores+1) + asinh(eci) + asinh(econexpo) + asinh(covexpo) + asinh(OFFICES) + rsa + lsa + dsa + precovdw, plot1)
+    plot1 <- subset(sf4, pppsores > 0)
+    p2 <- feols(pppsores ~ log(lfsores+1) + asinh(eci) + asinh(econexpo) + asinh(covexpo) + asinh(OFFICES) + rsa + lsa + dsa + precovdw| FED + Date, plot1)
     p2 <- data.frame(plot1, ppr = p2$residuals)
-    p2$dwr <- feols(log(dwsores) ~ log(lfsores+1) + asinh(eci) + asinh(econexpo) + asinh(covexpo) + asinh(OFFICES) + rsa + lsa + dsa + precovdw, p2)$residuals
+    p2$dwr <- feols(dwsores ~ log(lfsores+1) + asinh(eci) + asinh(econexpo) + asinh(covexpo) + asinh(OFFICES) + rsa + lsa + dsa + precovdw| FED + Date, p2)$residuals
     p2 <- p2 %>% mutate(bin = ntile(dwr, n=20))
     p2 <- p2 %>% group_by(bin) %>% summarise(ppr = mean(ppr), dwr = mean(dwr), size=mean(log(Assets)))
     ggplot(p2, aes(x=dwr, y=ppr)) + geom_smooth(method=lm, alpha=.25, se=F, level=.95, color='red') +
       #stat_summary_bin(bin = 20) +
       geom_point(shape = 1, aes(size=size)) + theme(legend.position = "none") +
-      ylab('Residualized PPP') + xlab('Residualized DW')
+      xlab('Residualized PPP/Reserves') + ylab('Residualized DW/Reserves')
     
 # correlation between instrument and non-PPP loans
-    plot1 <- aggregate(ed ~ RSSD + Quarter, sf3, mean)
+    plot1 <- aggregate(c_instr ~ RSSD + Quarter, sf3, mean)
     plot1 <- left_join(plot1, aggregate(nonppp_loans ~ IDRSSD + Date, df, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
     plot1 <- left_join(plot1, aggregate(RCON2170 ~ IDRSSD + Date, df, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
     plot1$npshare <- plot1$nonppp_loans/plot1$RCON2170
-    feols(npshare ~ ed , plot1)
+    feols(npshare ~ c_instr , plot1)
     
 # Bins of bank shock to reserves and the share of banks that borrow from DW in that bin ----
     plot1 <- subset(sf3, pppsores > 0.01)
@@ -482,6 +482,21 @@ print(xtable(plot1), include.rownames=FALSE)
       xlab('Bank Size Binned') + ylab('Share of Banks accesing DW') +
       scale_y_continuous(labels = label_number(suffix = "%"))
       #scale_x_binned()
+    
+    # bins of shock size and dw quantity borrowed
+    plot1 <- subset(sf3, dwsores > 0.01)
+    plot1 <- plot1[,c('pppsores','dwsores','size')]
+    plot1 <- plot1 %>% arrange(pppsores) %>% mutate(bin = ntile(pppsores, n=10), bin2 = ntile(size, n=10))
+    temp <- plot1 %>% group_by(bin) %>% count()
+    plot1 <- left_join(plot1, temp)    
+    plot1 <- left_join(aggregate(dwsores ~ bin, plot1, mean), temp)    
+    plot1$dwshare <- plot1$dwbin_notest*100/plot1$n
+    ggplot(plot1, aes(x=as.factor(bin), y=dwsores)) + geom_col() + 
+      xlab('Bank Size Binned') + ylab('Share of Banks accesing DW')
+      #scale_y_continuous(labels = label_number(suffix = "%"))
+    
+    
+    
     
     plot1 <- subset(sf4, PPP > 0)
     plot1 <- plot1[,c('pppsores','RCON2170')]

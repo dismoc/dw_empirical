@@ -133,10 +133,11 @@ nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID', 'Date'))
   base$STALPBR <- substrRight(base$cntst, 2)
   base <- aggregate(c_instr ~ rssd + DateApproved + STALPBR, base, mean)
   
-  temp <- aggregate(DEPSUMBR ~ STALPBR + RSSDID, sod, FUN = sum) %>% group_by(RSSDID)
+  sodn <- sod; sodn$cntst <- toupper(paste0(sodn$CNTYNAMB,", ",sodn$STALPBR))
+  temp <- aggregate(DEPSUMBR ~ cntst + RSSDID, sodn, FUN = sum) %>% group_by(RSSDID)
   temp <- temp %>% group_by(RSSDID) %>% mutate(totdep = sum(DEPSUMBR))
   temp$depshare <- temp$DEPSUMBR/temp$totdep
-  temp <- left_join(temp, base, by=c('RSSDID' = 'rssd', 'STALPBR'))
+  temp <- left_join(temp, base, by=c('RSSDID' = 'rssd', 'cntst'))
   temp$c_instr <- temp$c_instr*temp$depshare
   temp <- aggregate(c_instr ~ RSSDID + DateApproved, temp, sum)
   
