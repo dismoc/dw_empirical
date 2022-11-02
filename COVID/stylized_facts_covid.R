@@ -291,21 +291,11 @@ print(xtable(plot1), include.rownames=FALSE)
   sf$preppp <- ifelse(as.Date(sf$DateApproved) <= as.Date('2020-04-02'), 0, 1)
   setnames(sf, old = c('DateApproved','InitialApprovalAmount','Loan.amount'),
            new = c('Date','PPP','DW'))
-  sfc <- subset(sf, Date >= '2020-04-03' & Date <= '2020-05-15') 
   
 # Time series figure about the PPP shock and the DW borrowing sizes ----
-  # Plotting the number of DW loans agains the PPP lending
-  plot1 <- aggregate(cbind(dwbin_notest, dw_bin, PPP) ~ Date, sf3, sum)
-  plot1 <- subset(plot1, Date <= as.Date('2020-08-07'))
-  plot1$dw_bin <- ifelse(plot1$dw_bin == 0, NA, plot1$dw_bin)
-  plot1$dwbin_notest <- ifelse(plot1$dwbin_notest == 0, NA, plot1$dwbin_notest)
-  plot1 <- plot1 %>% mutate(dw_bin = na.approx(dw_bin), dwbin_notest = na.approx(dwbin_notest))
-  plot1$PPP <- plot1$PPP/1000000000
-  ggplot(plot1) +
-    geom_line(aes(x=Date, y= dw_bin, colour = 'DW Borrowing Count')) + 
-    geom_line(aes(x=Date, y= PPP, colour = 'PPP Borrowing')) 
-    
-  # PPP, DW, PPPLF, from 04-07
+  sfc <- subset(sf, Date >= '2020-04-03' & Date <= '2020-06-01') 
+  
+  # PPP, DW, PPPLF, from 04-06
   ggplot(sfc) +
     geom_line(aes(x = Date, y = PPP/8, colour ='PPP Lending'), size=1.5) +
     #geom_line(aes(x = Date, y = LF_request , colour ='LF Requested'), size=1.5) +
@@ -320,7 +310,7 @@ print(xtable(plot1), include.rownames=FALSE)
     geom_vline(xintercept = as.Date('2020-04-27'), linetype='dashed', size = 1.5)+
     geom_vline(xintercept = as.Date('2020-04-16'), linetype='dashed', size = 1, color ='red')+
     annotate('rect',fill='gray',xmin=as.Date('2020-04-03'),xmax = as.Date('2020-04-16'),ymin = -Inf, ymax = Inf, alpha = .5) +
-    annotate('rect',fill='gray',xmin=as.Date('2020-04-27'),xmax = as.Date('2020-05-15'),ymin = -Inf, ymax = Inf, alpha = .4) +
+    annotate('rect',fill='gray',xmin=as.Date('2020-04-27'),xmax = as.Date('2020-06-01'),ymin = -Inf, ymax = Inf, alpha = .4) +
     annotate("text", x=as.Date('2020-04-02'), y=1e9, label="PPP Phase 1", angle=90) +
     annotate("text", x=as.Date('2020-04-26'), y=1e9, label="PPP Phase 2", angle=90) +
     annotate("text", x=as.Date('2020-04-17'), y=6e9, label="First PPPLF Disbursed", angle=270)
@@ -505,4 +495,71 @@ print(xtable(plot1), include.rownames=FALSE)
     ggplot(plot1, aes(x=as.factor(bin), y=pppsores)) + geom_col() + 
       xlab('Bank Size Binned') + ylab('Share of Reserves Lent through program')
     #scale_x_binned()
+    
+# Decile comparison of banks that borrow from the DW and how much PPP they lent out. ----
+    plot1 <- subset(sf4, DW > 0) %>% mutate(dec = ntile(dwsores, 5))
+    plot1$dec <- plot1$dec+1
+    temp <- subset(sf4, DW == 0) %>% mutate(dec = ntile(dwsores, 1))
+    plot1 <- rbind(plot1, temp)
+    plot1 <- aggregate(cbind(pppsores,dwsores) ~ dec, plot1, median)
+    plot1$col <- ifelse(plot1$dec == 1, 'No DW','DW Bins')
+    plot1$dwsores <- plot1$dwsores/10
+    ggplot(plot1, aes(x=dec)) + geom_col(aes(y=pppsores,fill=col)) +
+      ylab('Median PPP Lending as Share of Reserves') + xlab('Quintiles') 
+
+    
+# CDF of PPPE on small business loans and PPP loans (like figure 1 granja) ----
+    plot1 <- sf4; plot1$pppe <- round(plot1$pppe,2)
+    plot1 <- aggregate(cbind(ppp_share_tot, sb_share_tot) ~ pppe, plot1, sum)
+    plot1 <- plot1 %>% arrange(pppe) %>% mutate(cs_ppp = cumsum(ppp_share_tot), cs_sb = cumsum(sb_share_tot))
+    ggplot(plot1, aes(x=pppe)) + geom_point(aes(y = cs_sb, colour='Small Business Loans'),shape=1, size=4) +
+      geom_point(aes(y = cs_ppp, colour='PPP Loans'),shape=2, size=4) +
+      xlab('Bank PPPE') + ylab('Cumulative Share of Loans') +
+      theme(legend.position = c(.2, .9), legend.title=element_blank()) +
+      geom_vline(xintercept = 0, linetype='dashed', size = 1, color = 'red')
+    
+# time series chart (like granja Figure 11) ----
+    # Table 1 - OLS results (Pooled, Large, small) - w/ and without controls for DW borrowing probability - LPM 
+    ta2 <- list()
+    ta2[[1]] <- feols(dwbin_notest ~ i(week,pppsores) | FED,
+                      #family = binomial(link = "logit"),
+                      data = sf3, panel.id = c('RSSD','Date'))
+    ta2[[2]] <- update(ta2[[1]], . ~.
+                       + LF_30 + precovdw + log(OFFICES) + rsa + eqcaprat + eci  + ci_com + scisoa + cdep + cisoa + liqass + levrat + size +log(dwage) + covexpo)
+    ta2[[3]] <- update(ta2[[1]], subset = sf3$bigsmall == 1)
+    ta2[[4]] <- update(ta2[[2]], subset = sf3$bigsmall == 1)
+    ta2[[5]] <- update(ta2[[1]], subset = sf3$bigsmall == 0)
+    ta2[[6]] <- update(ta2[[2]], subset = sf3$bigsmall == 0)
+    etable(ta2, dict = dict1,
+           title = 'Linear probability model estimation of DW borrowing probability. Column (1-2) is the pooled sample with and without controls, column (3-4) is for large banks that have assets greater than $600M, and columns (5-6) is for small community banks. The results from column (2) implies that a 10 percentage point increase in the PPP quantity loaned as a share of the reserves increases probability to borrow from the discount window by 1.6 percentage points. There seems to be a greater effect for large banks when shocked as compared to small banks.',
+           label = 'main_reg',
+           headers = NA,
+           digits = 4,
+           fitstat = ~n + r2,
+           #group = list('Controls:'=c('lsa','rsa','dsa','Equity Cap Ratio','Log Assets','Log RA Ratio','econexpo','COVID Exposure','eci','npplsores','CI','C&I','COVID','Assets','OFFICES','age','Tier')),
+           extralines = list('Pooled','Pooled','Large Banks', 'Large Banks','Small Banks','Small Banks'),
+           tex = F)
+    
+    # Table 2 - OLS results (Pooled, Large, small) - w/ and without controls for DW borrowing quantity
+    ta <- list()
+    sft <- subset(sf3, DW > 0.0)
+    ta[[1]] <- feols(dwsores ~ i(week,pppsores)|FED + Date, 
+                     sft, 
+                     #subset = sf3$PPP>0 & sf3$DW > 0
+                     panel.id = c('RSSD','Date'))
+    ta[[2]] <- update(ta[[1]], . ~ .
+                      + LF_30 + precovdw + log(OFFICES) + rsa + eqcaprat + eci  + ci_com + scisoa + cdep + cisoa + liqass + levrat + size +log(dwage) + covexpo)
+    ta[[3]] <- update(ta[[1]], subset =  sft$bigsmall == 1)
+    ta[[4]] <- update(ta[[2]], subset =  sft$bigsmall == 1)
+    ta[[5]] <- update(ta[[1]], subset =  sft$bigsmall == 0)
+    ta[[6]] <- update(ta[[2]], subset =  sft$bigsmall == 0)
+    etable(ta, dict = dict1,
+           title = 'OLS Estimation of Log DW Borrowing. Columns correspond to the same shares as Table 1. ',
+           label = 'main_reg',
+           headers = c('Pooled','Pooled','Large Banks', 'Large Banks','Small Banks','Small Banks'),
+           #digits = 5,
+           fitstat = ~n + r2,
+           group = list('Controls:'=c('lsa','rsa','dsa','Equity Cap Ratio','Log Assets','Log RA Ratio','econexpo','COVID Exposure','eci','npplsores','CI','C&I','COVID','Assets','OFFICES','age','Tier')),
+           #extralines = list('Pooled','Pooled','Large Banks', 'Large Banks','Small Banks','Small Banks'),
+           tex = F)
     

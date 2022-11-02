@@ -106,7 +106,7 @@ base$InitialApprovalAmount <- ifelse(is.na(base$InitialApprovalAmount) == TRUE,0
 base <- aggregate(ed ~ RSSDID + Date, base, sum)
 
 nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID', 'Date'))
-# Instrument 3: Expected responsiveness of bank using leave-one-out Bartik
+# Instrument 3: Expected responsiveness of bank using leave-one-out Bartik ----
   base <- ppf %>% group_by(rssd, cntst,DateApproved) %>% count()
   base <- left_join(base, subset(df, Date == as.Date('2019-12-31'))[,c('IDRSSD','OFFICES')], by=c('rssd' = 'IDRSSD'))
   base$OFFICES <- ifelse(is.na(base$OFFICES) == TRUE, 1, base$OFFICES)
@@ -143,43 +143,54 @@ nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID', 'Date'))
   
   nf1 <- left_join(nf1, temp, by=c('IDRSSD' = 'RSSDID','Date' = 'DateApproved'))
   nf1$c_instr <- ifelse(is.na(nf1$c_instr) == TRUE, 0, nf1$c_instr)
-  # Aggregate instrument - market share * number of loans given in that county ----
-temp <- ppf %>% group_by(cntst) %>% count()
-sodn <- sod; sodn$cntst <- toupper(paste0(sod$CNTYNAMB,", ",sod$STALPBR))
-base <- aggregate(DEPSUMBR ~ cntst + RSSDID, sodn, FUN = sum) %>% group_by(RSSDID)
-base <- base %>% group_by(cntst) %>% mutate(totdep = sum(DEPSUMBR))
-base$depshare <- base$DEPSUMBR/base$totdep
-base <- left_join(base, temp)
-base$epppn <- base$depshare*base$n
-base <- aggregate(epppn ~ RSSDID, base, sum)
-nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID'))
+# Aggregate instrument - market share * number of loans given in that county ----
+  temp <- ppf %>% group_by(cntst) %>% count()
+  sodn <- sod; sodn$cntst <- toupper(paste0(sod$CNTYNAMB,", ",sod$STALPBR))
+  base <- aggregate(DEPSUMBR ~ cntst + RSSDID, sodn, FUN = sum) %>% group_by(RSSDID)
+  base <- base %>% group_by(cntst) %>% mutate(totdep = sum(DEPSUMBR))
+  base$depshare <- base$DEPSUMBR/base$totdep
+  base <- left_join(base, temp)
+  base$epppn <- base$depshare*base$n
+  base <- aggregate(epppn ~ RSSDID, base, sum)
+  nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID'))
 
+#Aggregate Instrument 2 - market share precovid * log(pop of that county)
+  sodn <- sod; sodn$combined_key <- toupper(paste0(sod$CNTYNAMB,", ",sod$STNAMEBR, ", US"))
+  base <- aggregate(DEPSUMBR ~ combined_key + RSSDID, sodn, sum)
+  citmatch$combined_key <- toupper(citmatch$combined_key)
+  base <- left_join(base, citmatch[,c('combined_key','population')])
+  base <- base[!is.na(base$population) == TRUE,]
+  
+  base <- base %>% group_by(combined_key) %>% mutate(cnty_dep = sum(DEPSUMBR))
+  base$dep_share <- base$DEPSUMBR*log(base$population)/base$cnty_dep
+  base <- aggregate(dep_share ~ RSSDID, base, sum)
+  nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID'))
 # COVID Exposure ----
-temp <- data.table(citmatch); 
-temp <-temp[,list(wdens = weighted.mean(density,population)),by=combined_key]
-temp <- left_join(aggregate(population ~ combined_key, citmatch, sum), temp)
-cov1 <- left_join(cov,temp, c('Combined_Key' = 'combined_key'))
-cov1 <- cov1[ , -which(names(cov1) %in% c('UID', 'iso2', 'iso3', 'code3','Admin2', 'Province_State', 'Country_Region','Lat','Long_'))]
-colnames(cov1) <- sub('X',"",colnames(cov1))
-cov1 <- melt(cov1, id.vars = c("Combined_Key","FIPS",'population','wdens'), variable.name = "Date")
-cov1$Date <- as.Date(cov1$Date,'%m.%d.%Y')
-cov1 <- subset(cov1, Date >= as.Date('2020-03-01') & Date <= as.Date('2020-10-01'))
-cov1 <- data.frame(cov1) %>% group_by(Combined_Key) %>% mutate(new_cases = value - dplyr::lag(value,7, default=0)) %>% arrange(Combined_Key, Date)
-cov1$ncasepdens <- cov1$wdens*cov1$new_cases/cov1$population
-
-sodn <- sod; sodn$Combined_Key <- paste0(sod$CNTYNAMB,", ",sod$STNAMEBR, ", US")
-base <- aggregate(DEPSUMBR ~ Combined_Key + RSSDID, sodn, FUN = sum) %>% group_by(RSSDID)
-base <- base %>% group_by(RSSDID) %>% mutate(totdep = sum(DEPSUMBR))
-base$depshare <- base$DEPSUMBR/base$totdep
-base$Date <- as.Date('2020-03-01')
-base <- base %>% group_by(RSSDID) %>% complete(Date = seq.Date(as.Date('2020-03-01'), as.Date('2020-10-01'), by='day')) %>% fill(depshare, Combined_Key)
-base <- base[,c('RSSDID','Date','Combined_Key','depshare')]
-
-base <- left_join(base, cov1[,c('Combined_Key','Date','ncasepdens')], by=c('Combined_Key','Date'))
-base$covexpo <- base$depshare*base$ncasepdens
-base <- aggregate(covexpo ~ RSSDID + Date, base, sum) %>% arrange(RSSDID, Date)
-nf1 <- left_join(nf1, base, by=c('IDRSSD'= 'RSSDID','Date'))
-rm(base, cov1, temp)
+  temp <- data.table(citmatch); 
+  temp <-temp[,list(wdens = weighted.mean(density,population)),by=combined_key]
+  temp <- left_join(aggregate(population ~ combined_key, citmatch, sum), temp)
+  cov1 <- left_join(cov,temp, c('Combined_Key' = 'combined_key'))
+  cov1 <- cov1[ , -which(names(cov1) %in% c('UID', 'iso2', 'iso3', 'code3','Admin2', 'Province_State', 'Country_Region','Lat','Long_'))]
+  colnames(cov1) <- sub('X',"",colnames(cov1))
+  cov1 <- melt(cov1, id.vars = c("Combined_Key","FIPS",'population','wdens'), variable.name = "Date")
+  cov1$Date <- as.Date(cov1$Date,'%m.%d.%Y')
+  cov1 <- subset(cov1, Date >= as.Date('2020-03-01') & Date <= as.Date('2020-10-01'))
+  cov1 <- data.frame(cov1) %>% group_by(Combined_Key) %>% mutate(new_cases = value - dplyr::lag(value,7, default=0)) %>% arrange(Combined_Key, Date)
+  cov1$ncasepdens <- cov1$wdens*cov1$new_cases/cov1$population
+  
+  sodn <- sod; sodn$Combined_Key <- paste0(sod$CNTYNAMB,", ",sod$STNAMEBR, ", US")
+  base <- aggregate(DEPSUMBR ~ Combined_Key + RSSDID, sodn, FUN = sum) %>% group_by(RSSDID)
+  base <- base %>% group_by(RSSDID) %>% mutate(totdep = sum(DEPSUMBR))
+  base$depshare <- base$DEPSUMBR/base$totdep
+  base$Date <- as.Date('2020-03-01')
+  base <- base %>% group_by(RSSDID) %>% complete(Date = seq.Date(as.Date('2020-03-01'), as.Date('2020-10-01'), by='day')) %>% fill(depshare, Combined_Key)
+  base <- base[,c('RSSDID','Date','Combined_Key','depshare')]
+  
+  base <- left_join(base, cov1[,c('Combined_Key','Date','ncasepdens')], by=c('Combined_Key','Date'))
+  base$covexpo <- base$depshare*base$ncasepdens
+  base <- aggregate(covexpo ~ RSSDID + Date, base, sum) %>% arrange(RSSDID, Date)
+  nf1 <- left_join(nf1, base, by=c('IDRSSD'= 'RSSDID','Date'))
+  rm(base, cov1, temp)
 
 # Weekly Economic State level indicators ----
 temp <- unique(data.frame(State = citmatch$state_id, sname = citmatch$state_name))
