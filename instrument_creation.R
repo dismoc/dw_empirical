@@ -106,7 +106,7 @@ base$InitialApprovalAmount <- ifelse(is.na(base$InitialApprovalAmount) == TRUE,0
 base <- aggregate(ed ~ RSSDID + Date, base, sum)
 
 nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID', 'Date'))
-# Instrument 3: Expected responsiveness of bank using leave-one-out Bartik ----
+# Instrument 3: Expected responsiveness of bank using all other branches outside of county Bartik ----
   base <- ppf %>% group_by(rssd, cntst,DateApproved) %>% count()
   base <- left_join(base, subset(df, Date == as.Date('2019-12-31'))[,c('IDRSSD','OFFICES')], by=c('rssd' = 'IDRSSD'))
   base$OFFICES <- ifelse(is.na(base$OFFICES) == TRUE, 1, base$OFFICES)
@@ -124,7 +124,8 @@ nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID', 'Date'))
     
     return(result)
   }
-  base <- base %>% group_by(rssd, DateApproved) %>% mutate(c_instr = leave_one_out_mean(n))
+  
+  base <- base %>% group_by(rssd, DateApproved) %>% mutate(c_instr = leave_one_out_mean(data.frame(n, cntst)))
   base$c_instr <- ifelse(is.nan(base$c_instr) == TRUE, 0, base$c_instr)
   base$c_instr <- base$c_instr/base$OFFICES
   substrRight <- function(x, n){
@@ -143,6 +144,72 @@ nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID', 'Date'))
   
   nf1 <- left_join(nf1, temp, by=c('IDRSSD' = 'RSSDID','Date' = 'DateApproved'))
   nf1$c_instr <- ifelse(is.na(nf1$c_instr) == TRUE, 0, nf1$c_instr)
+  
+# second method of creating the leave one out mean ----
+  base <- ppf %>% group_by(rssd, cntst,DateApproved) %>% count()
+  base <- left_join(base, subset(df, Date == as.Date('2019-12-31'))[,c('IDRSSD','OFFICES')], by=c('rssd' = 'IDRSSD'))
+  base$OFFICES <- ifelse(is.na(base$OFFICES) == TRUE, 1, base$OFFICES)
+  base$OFFICES <- ifelse(base$OFFICES == 0, 1, base$OFFICES)
+  base <- base %>% group_by(rssd, DateApproved) %>% mutate(count = sum(n)) %>% arrange(rssd, DateApproved)
+  
+  leave_county_out_mean <- function(df) {
+    result <- c()
+    
+    for ( i in seq_along(df$n) ) {
+      # note minus-i subsetting is used to subset one observation in each iteration
+      # and the na.rm option to handle missing values
+      result[i] <- mean(df[!df$cntst %in% df$cntst[i],'n'], na.rm = TRUE)
+      if( is.nan(result[i]) == TRUE) { result[i] == 0}
+    }
+    
+    return(result)
+  }
+  
+  base <- base %>% group_by(rssd, DateApproved) %>% mutate(c_instr = leave_one_out_mean(n))
+  base$c_instr <- ifelse(is.nan(base$c_instr) == TRUE, 0, base$c_instr)
+  substrRight <- function(x, n){
+    substr(x, nchar(x)-n+1, nchar(x))
+  }
+  base$STALPBR <- substrRight(base$cntst, 2)
+
+  sodn <- sod; sodn$cntst <- toupper(paste0(sodn$CNTYNAMB,", ",sodn$STALPBR))
+  temp <- aggregate(DEPSUMBR ~ cntst + RSSDID, sodn, FUN = sum) %>% group_by(RSSDID)
+  temp <- temp %>% group_by(RSSDID) %>% mutate(totdep = sum(DEPSUMBR))
+  temp$depshare <- temp$DEPSUMBR/temp$totdep
+  temp <- left_join(temp, base, by=c('RSSDID' = 'rssd', 'cntst'))
+  temp$c_instr <- temp$c_instr*temp$depshare
+  temp <- aggregate(c_instr ~ RSSDID + DateApproved, temp, sum)
+  
+  nf1 <- left_join(nf1, temp, by=c('IDRSSD' = 'RSSDID','Date' = 'DateApproved'))
+  nf1$c_instr <- ifelse(is.na(nf1$c_instr) == TRUE, 0, nf1$c_instr)
+  
+# Instrument 4: expected responsiveness of banks using other banks within its size bin (20 bins) ----
+  base <- ppf %>% group_by(rssd, OriginatingLenderState, DateApproved) %>% count(name = 'n_ppp_loans')
+  base <- left_join(base, subset(df, Date == as.Date('2020-03-31'))[,c('IDRSSD','OFFICES','size')] %>% mutate(size_bin = ntile(size,20)), by=c('rssd' = 'IDRSSD'))
+  base$OFFICES <- ifelse(is.na(base$OFFICES) == TRUE, 1, base$OFFICES)
+  base$OFFICES <- ifelse(base$OFFICES == 0, 1, base$OFFICES)
+  base <- base %>% group_by(rssd, OriginatingLenderState) %>% complete(DateApproved = seq.Date(as.Date('2020-04-03'), as.Date('2020-08-08'), by='day')) %>% fill(size_bin,size, OFFICES,.direction="downup")
+  base$n_ppp_loans <- ifelse(is.na(base$n_ppp_loans)==T,0,base$n_ppp_loans)
+  
+  base <- base %>% group_by(DateApproved, OriginatingLenderState, size_bin) %>% mutate(ppp_count_in_state = sum(n_ppp_loans))
+  base <- base %>% group_by(DateApproved, OriginatingLenderState, size_bin) %>% add_count()
+  setnames(base,'n','n_bank_bin_in_state')
+  base <- base %>% group_by(DateApproved, size_bin) %>% mutate(ppp_count_tot = sum(n_ppp_loans))
+  base <- base %>% group_by(DateApproved, size_bin) %>% add_count(name = "n_bank_bin_tot")
+  base$oos_ppp <- base$ppp_count_tot-base$ppp_count_in_state
+  base$oos_bin <- base$n_bank_bin_tot-base$n_bank_bin_in_state
+  base$avg_ppp_bin <- base$oos_ppp/base$oos_bin
+  
+  temp <- aggregate(DEPSUMBR ~ RSSDID + STALPBR, sod, sum)
+  temp <- temp %>% group_by(RSSDID) %>% mutate(deptot = sum(DEPSUMBR)) %>% arrange(RSSDID)
+  temp$dep_share <- temp$DEPSUMBR/temp$deptot
+  
+  base <- left_join(base, temp, by=c('rssd'='RSSDID'))
+  base$apppbin <- base$avg_ppp_bin*base$dep_share
+  base <- aggregate(apppbin ~ rssd + DateApproved, base, sum)
+  setnames(base, old = c('rssd','DateApproved'), new = c('IDRSSD','Date'))
+  
+  nf1 <- left_join(nf1, base)
 # Aggregate instrument - market share * number of loans given in that county ----
   temp <- ppf %>% group_by(cntst) %>% count()
   sodn <- sod; sodn$cntst <- toupper(paste0(sod$CNTYNAMB,", ",sod$STALPBR))
@@ -154,7 +221,7 @@ nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID', 'Date'))
   base <- aggregate(epppn ~ RSSDID, base, sum)
   nf1 <- left_join(nf1, base, by=c('IDRSSD' = 'RSSDID'))
 
-#Aggregate Instrument 2 - market share precovid * log(pop of that county)
+#Aggregate Instrument 2 - market share precovid * log(pop of that county) ----
   sodn <- sod; sodn$combined_key <- toupper(paste0(sod$CNTYNAMB,", ",sod$STNAMEBR, ", US"))
   base <- aggregate(DEPSUMBR ~ combined_key + RSSDID, sodn, sum)
   citmatch$combined_key <- toupper(citmatch$combined_key)

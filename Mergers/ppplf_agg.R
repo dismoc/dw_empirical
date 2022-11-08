@@ -32,16 +32,21 @@ pp <- data.frame(read_excel(paste0("D:/Research/DW lending empirical/Data/PPPLF/
 
 for (i in 2:length(list)){
   ppn <- data.frame(read_excel(paste0("D:/Research/DW lending empirical/Data/PPPLF/",list[i])))
-  pp <- smartbind(pp,ppn) %>% select(-contains("..."))
+  pp <- smartbind(pp,ppn) %>% dplyr::select(-contains("..."))
 }
 
 pp$origin_date <- as.Date(ifelse(year(pp$Date.Of.Maturity) == 2022, 
                          as.Date(pp$Date.Of.Maturity, format = '%Y-%m-%d') - years(2),
                          as.Date(pp$Date.Of.Maturity, format = '%Y-%m-%d') - years(5)))
 
-pp <- pp[!duplicated(pp[c('Date.Of.Advance','Original.Outstanding.Advance.Amount')]),]
+pp <- pp %>% arrange(Institution.RSSD, Date.Of.Advance)
+
+pp <- pp[!duplicated(pp[c('Institution.RSSD','Date.Of.Advance','Original.Outstanding.Advance.Amount','Date.Of.Maturity')]),]
 pp$Date.Of.Advance <- as.Date(pp$Date.Of.Advance)
 
-pp$processing_time <- Winsorize((pp$Date.Of.Advance-pp$origin_date),minval=0, probs=c(.00,1),na.rm=TRUE)
+pp$processing_time <- as.numeric(Winsorize((pp$Date.Of.Advance-pp$origin_date),minval=0, na.rm=TRUE))
+
+pp <- left_join(aggregate(Original.Outstanding.Advance.Amount ~ Institution.RSSD + Date.Of.Advance + origin_date, pplf, sum),
+          aggregate(processing_time ~ Institution.RSSD + Date.Of.Advance + origin_date, pplf, mean))
 
 write.csv(pp,"D:\\Research\\DW lending empirical\\Data\\ppplf_full.csv")

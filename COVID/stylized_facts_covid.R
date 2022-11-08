@@ -292,7 +292,7 @@ print(xtable(plot1), include.rownames=FALSE)
   setnames(sf, old = c('DateApproved','InitialApprovalAmount','Loan.amount'),
            new = c('Date','PPP','DW'))
   
-# Time series figure about the PPP shock and the DW borrowing sizes ----
+# FIGURE 1: Time series figure about the PPP shock and the DW borrowing sizes ----
   sfc <- subset(sf, Date >= '2020-04-03' & Date <= '2020-06-01') 
   
   # PPP, DW, PPPLF, from 04-06
@@ -302,10 +302,10 @@ print(xtable(plot1), include.rownames=FALSE)
     #geom_line(aes(x = Date, y = LF_received , colour ='LF Received'), size=1.5) +
     geom_line(aes(x = Date, y = DW, colour ='DW Borrowing'), size=1.5) +
     scale_y_continuous(name = "Daily DW Quantity", 
-                       sec.axis = sec_axis(~.*8, name="Daily PPP Loans", labels = label_number(suffix = "B", scale = 1e-9)),
+                       sec.axis = sec_axis(~.*8, name="Daily PPP Loan Quantity", labels = label_number(suffix = "B", scale = 1e-9)),
                        labels = label_number(suffix = "B", scale = 1e-9)) +
-    labs(x="Date") + scale_x_date(date_breaks = '2 weeks') + 
-    theme(legend.position = c(.85, .85), legend.title=element_blank(), text = element_text(24)) +
+    labs(x="Date") + scale_x_date(date_breaks = '1 week') + 
+    theme(legend.position = c(.85, .85), legend.title=element_blank(), axis.title = element_text(size=18)) +
     geom_vline(xintercept = as.Date('2020-04-03'), linetype='dashed', size = 1.5)+
     geom_vline(xintercept = as.Date('2020-04-27'), linetype='dashed', size = 1.5)+
     geom_vline(xintercept = as.Date('2020-04-16'), linetype='dashed', size = 1, color ='red')+
@@ -403,6 +403,19 @@ print(xtable(plot1), include.rownames=FALSE)
     
     
 # Scatter plot of DW borrowing and PPP lending ----
+    
+    # With the time series data
+    plot1 <- subset(sf3, pppsores > 0 & dwsores>0); 
+    plot1 <- data.frame(LogDW = plot1$dwsores, LogPPP = plot1$pppsores, size = log(plot1$Assets))
+    plot1 <- plot1[!is.infinite(plot1$LogDW),]
+    plot1 <- plot1 %>% mutate(bin = ntile(LogDW, n=20))
+    plot1 <- plot1 %>% group_by(bin) %>% summarise(LogPPP = mean(LogPPP), LogDW = mean(LogDW), size=mean(size))
+    preg <- feols(LogPPP ~ LogDW, plot1); preg
+    ggplot(plot1, aes(x=LogPPP,y=LogDW)) + geom_point(shape = 1, aes(size=size)) + 
+      geom_smooth(method=lm, alpha=0, color='red')+ 
+      theme(legend.position = "none", axis.title = element_text(size=21)) +
+      ylab('DW/Reserves') + xlab('PPP/Reserves') 
+      
     # With the aggregated data
     plot1 <- subset(sf4, pppsores > 0 & dwsores>0); 
     plot1 <- data.frame(LogDW = log(plot1$dwsores), LogPPP = log(plot1$pppsores), size = log(plot1$RCON2170))
@@ -413,32 +426,19 @@ print(xtable(plot1), include.rownames=FALSE)
       geom_smooth(method=lm, alpha=0, color='red')+ theme(legend.position = "none") +
       ylab('PPP') + xlab('DW')
     
-    # With the time series data
-    plot1 <- subset(sf3, pppsores > 0 & dwsores>0); 
-    plot1 <- data.frame(LogDW = log(plot1$dwsores), LogPPP = log(plot1$pppsores), size = log(plot1$Assets))
-    plot1 <- plot1[!is.infinite(plot1$LogDW),]
-    plot1 <- plot1 %>% mutate(bin = ntile(LogDW, n=20))
-    plot1 <- plot1 %>% group_by(bin) %>% summarise(LogPPP = mean(LogPPP), LogDW = mean(LogDW), size=mean(size))
-    preg <- feols(LogPPP ~ LogDW, plot1); preg
-    ggplot(plot1, aes(x=LogPPP,y=LogDW)) + geom_point(shape = 1, aes(size=size)) + 
-      geom_smooth(method=lm, alpha=0, color='red')+ theme(legend.position = "none") +
-      ylab('DW/Reserves') + xlab('PPP/Reserves') 
-      
-    #annotate("text", x=13, y=11, label=paste0('Slope = ',round(preg$coefficients[2],2)), angle=28)
-    
     
 # Scattered plot of residual values ----
     #With the time series data
     plot1 <- subset(sf3, pppsores > 0 & dwsores > 0)
-    p2 <- feols(pppsores ~ LF_30 + precovdw + log(OFFICES) + rsa + eqcaprat + eci +  ci_com + scisoa + cdep + cisoa + liqass + levrat + size +log(dwage) + covexpo| FED + Date, plot1)
+    p2 <- feols(pppsores ~ LF_30 + precovdw + log(OFFICES) + rsa + dsa+ lsa + eqcaprat + eci + ci_com + scisoa + cdep + cisoa + liqass + levrat + size +log(dwage) + covexpo| FED + Date, plot1)
     p2 <- data.frame(plot1[p2$obs_selection$obsRemoved,],ppr = p2$residuals)
-    p2$dwr <- feols(dwsores ~ LF_30 + precovdw + log(OFFICES) + rsa + eqcaprat + eci +  ci_com + scisoa + cdep + cisoa + liqass + levrat + size +log(dwage) + covexpo| FED + Date, p2)$residuals
+    p2$dwr <- feols(dwsores ~ LF_30 + precovdw + log(OFFICES) + rsa + dsa+ lsa + eqcaprat + eci + ci_com + scisoa + cdep + cisoa + liqass + levrat + size +log(dwage) + covexpo| FED + Date, p2)$residuals
     treg <- feols(dwr ~ ppr , p2);treg
     p2 <- p2 %>% mutate(bin = ntile(ppr, n=20))
     p2 <- p2 %>% group_by(bin) %>% summarise(ppr = weighted.mean(ppr, size), dwr = weighted.mean(dwr, size), size=weighted.mean(size, size))
     ggplot(p2, aes(x=ppr, y=dwr)) + geom_smooth(method=lm, alpha=.25, se=F, level=.95, color='red') +
       #stat_summary_bin(bins = 20, geom = 'point') +
-      geom_point(shape = 1, aes(size=size)) + theme(legend.position = "none") +
+      geom_point(shape = 1, aes(size=size)) + theme(legend.position = "none", axis.title = element_text(size=21)) +
       xlab('Residualized PPP/Reserves') + ylab('Residualized DW/Reserves')
     
     #With the aggregated data
@@ -454,23 +454,26 @@ print(xtable(plot1), include.rownames=FALSE)
       xlab('Residualized PPP/Reserves') + ylab('Residualized DW/Reserves')
     
 # correlation between instrument and non-PPP loans
-    plot1 <- aggregate(c_instr ~ RSSD + Quarter, sf3, mean)
-    plot1 <- left_join(plot1, aggregate(nonppp_loans ~ IDRSSD + Date, df, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
+    temp <- subset(df, Date >= as.Date('2020-01-01'))
+    temp$RCONLG27 <- ifelse(is.na(temp$RCONLG27) == TRUE, 0, temp$RCONLG27)
+    plot1 <- aggregate(c_instr ~ RSSD + Quarter, sf3, sum)
+    plot1 <- left_join(plot1, aggregate(cbind(RCON1766, RCONLG27) ~ IDRSSD + Date, temp, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
     plot1 <- left_join(plot1, aggregate(RCON2170 ~ IDRSSD + Date, df, mean), by=c('RSSD' = 'IDRSSD','Quarter'='Date'))
-    plot1$npshare <- plot1$nonppp_loans/plot1$RCON2170
-    feols(npshare ~ c_instr , plot1)
+    plot1$npshare <- (plot1$RCON1766-plot1$RCONLG27)/plot1$RCON2170
+    feols(log(npshare) ~ c_instr | Quarter , plot1)
     
 # Bins of bank shock to reserves and the share of banks that borrow from DW in that bin ----
-    plot1 <- subset(sf3, pppsores > 0.01)
+    plot1 <- subset(sf3, pppsores > 0.0)
     plot1 <- plot1[,c('pppsores','dwbin_notest','size')]
     plot1 <- plot1 %>% arrange(pppsores) %>% mutate(bin = ntile(pppsores, n=10), bin2 = ntile(size, n=10))
-    temp <- plot1 %>% group_by(bin2) %>% count()
+    temp <- plot1 %>% group_by(bin) %>% count()
     plot1 <- left_join(plot1, temp)    
-    plot1 <- left_join(aggregate(dwbin_notest ~ bin2, plot1, sum), temp)    
+    plot1 <- left_join(aggregate(dwbin_notest ~ bin, plot1, sum), temp)    
     plot1$dwshare <- plot1$dwbin_notest*100/plot1$n
-    ggplot(plot1, aes(x=as.factor(bin2), y=dwshare)) + geom_col() + 
-      xlab('Bank Size Binned') + ylab('Share of Banks accesing DW') +
-      scale_y_continuous(labels = label_number(suffix = "%"))
+    ggplot(plot1, aes(x=as.factor(bin), y=dwshare)) + geom_col() + 
+      xlab('Shock Size Binned') + ylab('Share of Observations Accessing DW') +
+      scale_y_continuous(labels = label_number(suffix = "%")) +
+      theme(axis.title = element_text(size=18))
       #scale_x_binned()
     
     # bins of shock size and dw quantity borrowed
@@ -505,8 +508,23 @@ print(xtable(plot1), include.rownames=FALSE)
     plot1$col <- ifelse(plot1$dec == 1, 'No DW','DW Bins')
     plot1$dwsores <- plot1$dwsores/10
     ggplot(plot1, aes(x=dec)) + geom_col(aes(y=pppsores,fill=col)) +
-      ylab('Median PPP Lending as Share of Reserves') + xlab('Quintiles') 
+      ylab('Median PPP Lending as Share of Reserves') + xlab('DW Borrowing as Share of Reserves Quintiles') +
+      theme(legend.title = element_blank(), legend.position = c(.2,.8), legend.text =element_text(size=24), text= element_text(size=16))
 
+    # by big vs small banks
+    plot1 <- subset(sf4, dwsores > 0) %>% group_by(bigsmall) %>% mutate(dec = ntile(dwsores,4))
+    plot1$dec <- plot1$dec+1
+    temp <- subset(sf4, DW == 0) %>% group_by(bigsmall) %>% mutate(dec = ntile(dwsores, 1))
+    plot1 <- rbind(plot1, temp)
+    plot1 <- aggregate(cbind(pppsores,dwsores) ~ dec + bigsmall, plot1, median)
+    plot1$col <- ifelse(plot1$dec == 1, 'No DW','DW Bins')
+    plot1$bigsmall <- ifelse(plot1$bigsmall ==0, 'Small Banks', 'Large Banks')
+    plot1$f = paste0(plot1$bigsmall, " - ",plot1$col)
+    ggplot(plot1, aes(x=dec)) + geom_bar(aes(y=pppsores,fill=as.factor(f)), stat="identity", width=.5, position = "dodge2") +
+      ylab('Median PPP Lending as Share of Reserves') + xlab('DW Borrowing as Share of Reserves Quintiles') +
+      theme(legend.title = element_blank(), legend.position = c(.3,.8), legend.text =element_text(size=20), text= element_text(size=16))+
+      scale_fill_manual(values=c("cyan4", "cyan3", "darkolivegreen3",'darkolivegreen2'))
+    
     
 # CDF of PPPE on small business loans and PPP loans (like figure 1 granja) ----
     plot1 <- sf4; plot1$pppe <- round(plot1$pppe,2)
@@ -563,3 +581,39 @@ print(xtable(plot1), include.rownames=FALSE)
            #extralines = list('Pooled','Pooled','Large Banks', 'Large Banks','Small Banks','Small Banks'),
            tex = F)
     
+# scatter of PPPLF Funds received vs requested ----
+    plot1 <- sf; 
+    plot1$LFr12  <- plot1$LF_request + dplyr::lead(plot1$LF_request,1, default=0) + dplyr::lead(plot1$LF_request,02, default=0)
+    plot1$LFr1  <- dplyr::lead(plot1$LF_request,1, default=0)
+    plot1 <- subset(plot1, Date >= as.Date('2020-04-03') & Date <= as.Date('2020-06-01'))
+    plot1 <- subset(plot1, Date <= as.Date('2020-04-16') | Date >= as.Date('2020-04-27'))
+    plot1 <- subset(plot1, PPP > 1000)
+    
+    plot1 <- subset(sf, Date >= as.Date('2020-04-03') & Date <= as.Date('2020-06-25'))
+    plot1 <- subset(plot1, Date <= as.Date('2020-04-16') | Date >= as.Date('2020-04-27'))
+    plot1$week <- week(plot1$Date)
+    plot1 <- aggregate(cbind(PPP, LF_request, LF_received) ~ week, plot1, sum)    
+
+    ggplot(plot1, aes(x=log(PPP),y=log(LF_received+1))) + geom_point() + geom_smooth(method=lm, color = 'red', alpha=0) +
+  xlab('Log PPP Quantity') + ylab('Log LF Funds Received') + 
+  theme(axis.title = element_text(size = 21), axis.text =  element_text(size = 16))
+  #scale_y_continuous(limits =c(0,NA),labels = label_number(suffix = "B", scale = 1e-9)) +
+  #scale_x_continuous(labels = label_number(suffix = "B", scale = 1e-9)) 
+  
+  
+  
+ggplot(plot1, aes(x=log(PPP),y=log(LF_request))) + geom_point() + geom_smooth(method=lm, color = 'red', alpha=0) +
+  xlab('Log PPP Quantity') + ylab('Log LF Funds Requested') +
+  theme(axis.title = element_text(size = 21), axis.text =  element_text(size = 16)) 
+  #scale_y_continuous(labels = label_number(suffix = "B", scale = 1e-9)) +
+  #scale_x_continuous(labels = label_number(suffix = "B", scale = 1e-9))
+
+# Graph of cumulative LF demand, received, and DW borrow
+plot1 <- sf2 %>% group_by(Date) %>% summarise(dwm1 = sum(DW_m1, na.rm=TRUE), dwm2 = sum(DW_m2, na.rm=TRUE), 
+                                              dw = sum(DW, na.rm=TRUE),
+                                              LF_received = sum(LF_received, na.rm=TRUE),
+                                              LF_requested = sum(LF_requested, na.rm=TRUE),
+                                              PPP = sum(PPP, na.rm=TRUE))
+plot1 <- plot1 %>% mutate(LFreq_cs = cumsum(LF_requested), LFrec_cs = cumsum(LF_received))
+ggplot(plot1, aes(x=Date)) + geom_line(aes(y=dw, color='DW')) + geom_line(aes(y=LF_requested, color='LF Requested')) +  geom_line(aes(y=LF_received, color='LF Received')) 
+  
